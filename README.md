@@ -53,4 +53,18 @@ python -m motor probar cola_aprendizaje/nueva_orden.borrador.json nueva_orden.pd
 
 ## Escaneados
 
-Las páginas sin texto se rasterizan a ~200-300 DPI, se enderezan (Hough), se corrige la iluminación, se usa Sauvola para detectar y borrar las líneas de la tabla, y se leen con RapidOCR (ONNX, local). Las palabras se separan por los huecos reales de tinta y la grilla de días se relee celda por celda. Si el OCR se equivoca en un número, las validaciones aritméticas lo marcan como «No cuadra» para revisión.
+Las páginas sin texto se rasterizan a ~300 DPI, se enderezan (Hough), se corrige la iluminación, se usa Sauvola para detectar y borrar las líneas de la tabla, y se leen con RapidOCR (ONNX, local) por franjas, llamando por separado al detector y al reconocedor. Las palabras se separan por los huecos reales de tinta (también en cursiva), las etiquetas pegadas a su valor se parten (`RUC:20566514622`), las confusiones típicas se corrigen (`PERI0DO`, `6O`), las columnas de la grilla de días se toman de las líneas verticales de la tabla y cada celda numérica se relee ampliada. Si aun así un número sale mal, las validaciones aritméticas marcan la orden como «No cuadra» para revisión.
+
+Medición con `_scripts/generar_escaneos.py` + `_scripts/benchmark_escaneos.py` (18 escaneos simulados de 6 órdenes, 428 campos por variante):
+
+| Variante | Condiciones | Campos exactos |
+|---|---|---|
+| limpio | 300 DPI, sin inclinación | ≈ 98 % |
+| normal | 200 DPI, 1° de inclinación, sombra y ruido | ≈ 95 % |
+| malo | 150 DPI, 2,5°, sombra fuerte, ruido y desenfoque | ≈ 50 % (no apto) |
+
+Lo que falla en limpio/normal son casi siempre espacios dentro de nombres («CHEILPERU»); los números, fechas y la grilla de días salen bien. Para escaneos reales conviene 200 DPI o más.
+
+## Despliegue
+
+La interfaz web no guarda estado en el servidor: el navegador conserva los resultados y las imágenes, y las revisiones entre documentos (duplicados, audios) y el Excel se piden con los resultados ya extraídos. Por eso funciona igual en local y en Vercel (`api/index.py` + `vercel.json`, Python 3.12, `maxDuration` 300 s). En Vercel cada petición acepta hasta 4,5 MB, así que el navegador sube los archivos por tandas.

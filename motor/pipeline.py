@@ -148,7 +148,10 @@ def procesar(ruta: str | Path, datos_bytes: bytes | None = None, con_imagen: boo
     }
     if plantilla is None:
         res["status"] = "TEMPLATE_NOT_IDENTIFIED"
-        res["learningQueue"] = encolar_aprendizaje(doc)
+        try:
+            res["learningQueue"] = encolar_aprendizaje(doc)
+        except OSError:  # sistema de archivos de solo lectura (despliegue en la nube)
+            res["learningQueue"] = None
         res["metrics"] = {"ms": round((time.perf_counter() - t0) * 1000)}
         res["_doc"] = doc
         return res

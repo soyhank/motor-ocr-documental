@@ -466,6 +466,9 @@ def _partir_etiqueta(texto: str) -> list[str]:
     m = _RX_ETIQUETA_PUNTO.match(texto)
     if m:
         return [m.group(1), m.group(2)]
+    m = re.match(r"^([A-Za-z]{3,})(\d[\d.,]*%)$", texto)  # IGV18.00%
+    if m:
+        return [m.group(1), m.group(2)]
     return [texto]
 
 
@@ -571,6 +574,10 @@ class Linea:
     @property
     def page(self):
         return self.tokens[0].page
+
+    @property
+    def page_ocr(self) -> bool:
+        return self.tokens[0].conf < 1.0  # los tokens de PDF nativo llevan confianza 1.0
 
 
 def agrupar_lineas(tokens: list[Token]) -> list[Linea]:

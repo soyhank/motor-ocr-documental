@@ -31,7 +31,7 @@ def _texto_fecha(s: str) -> str:
     """Mayúsculas sin tildes y con las confusiones del OCR dentro de palabras corregidas
     (MARZ0 -> MARZO) para reconocer nombres de mes."""
     t = sin_tildes(str(s)).upper()
-    return re.sub(r"(?<=[A-Z])0(?=[A-Z0-9])", "O", t)
+    return re.sub(r"(?<=[A-Z])0(?=[A-Z0-9\s,./]|$)", "O", t)
 
 
 def numero(s, decimal: str = "auto"):

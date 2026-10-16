@@ -71,11 +71,41 @@ def _en_region(t_or_a, region: dict | None) -> bool:
             and region.get("y0", -1) <= cy <= region.get("y1", 1001))
 
 
+_RX_META = re.compile(r"[*+(){}|]")
+
+
+def _literal_de(patron: str) -> str | None:
+    """Texto plano equivalente a un patrón casi literal ("PERIODO:", "Divisi[oó]n:");
+    None si el patrón usa construcciones de regex de verdad."""
+    p = sin_tildes(patron)
+    p = re.sub(r"\\s[*+]", " ", p)
+    p = re.sub(r"\[([^\]]+)\]\??", lambda m: m.group(1)[0], p)
+    p = p.replace("\\.", ".").replace("\\(", "(").replace("\\)", ")").replace("\\b", "")
+    p = re.sub(r"\?$", "", p).lstrip("^").rstrip("$")
+    if _RX_META.search(p) or "\\" in p:
+        return None
+    p = re.sub(r"\s+", " ", p).strip()
+    return p if len(p.replace(" ", "")) >= 6 else None
+
+
+def _parecido(texto: str, literal: str) -> bool:
+    """Compara sin espacios ni tildes y admite 1 o 2 caracteres mal leídos (PERlODOO: ~ PERIODO:)."""
+    from rapidfuzz import fuzz
+
+    a = re.sub(r"\s+", "", sin_tildes(texto)).upper()
+    b = re.sub(r"\s+", "", literal).upper()
+    if abs(len(a) - len(b)) > 2 or not a or not b:
+        return False
+    return fuzz.ratio(a, b) >= 80 and a[0] == b[0]
+
+
 def buscar_anclas(lineas: list[Linea], patron: str, sensible: bool = False, region: dict | None = None,
                   usados: set | None = None, max_tokens: int = 6) -> list[Ancla]:
     """Busca secuencias de tokens consecutivos cuyo texto unido calce completo con el patrón.
-    Por cada posición inicial se queda con la secuencia más larga que calce."""
+    Por cada posición inicial se queda con la secuencia más larga que calce. Si el patrón es
+    casi literal, también se acepta una lectura parecida (errores típicos de OCR)."""
     rx = _compilar(patron, sensible)
+    literal = _literal_de(patron)
     res = []
     for l in lineas:
         toks = l.tokens
@@ -89,7 +119,8 @@ def buscar_anclas(lineas: list[Linea], patron: str, sensible: bool = False, regi
                 if usados and id(toks[j]) in usados:
                     break
                 unido = sin_tildes(" ".join(t.text for t in toks[i:j + 1]))
-                if rx.fullmatch(unido) or any(rx.fullmatch(v) for v in _variantes_ocr(unido)):
+                if (rx.fullmatch(unido) or any(rx.fullmatch(v) for v in _variantes_ocr(unido))
+                        or (literal is not None and l.page_ocr and _parecido(unido, literal))):
                     mejor = j
             if mejor is not None:
                 a = Ancla(toks[i:mejor + 1], l, mejor)

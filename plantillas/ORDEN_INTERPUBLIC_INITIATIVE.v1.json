@@ -274,7 +274,7 @@
       },
       {
         "name": "total_avisos",
-        "pattern": "N[o°] Spots",
+        "pattern": "N[o°]? Spots",
         "type": "int"
       },
       {
