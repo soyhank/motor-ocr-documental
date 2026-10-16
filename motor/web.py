@@ -39,6 +39,27 @@ llamada a `/api/v1` debe llevar la cabecera `X-API-Key`.
 """
 
 app = FastAPI(title="Motor OCR Documental", version="2.0", description=DESCRIPCION_API)
+
+
+@app.middleware("http")
+async def _clave_web(request, call_next):
+    """Si MOTOR_CLAVE_WEB está definida (por ejemplo al abrirlo a internet con un túnel), la
+    página y su API piden esa contraseña (usuario: cualquiera). /api/v1 usa X-API-Key."""
+    clave = os.environ.get("MOTOR_CLAVE_WEB")
+    if clave and not request.url.path.startswith("/api/v1"):
+        import secrets
+        auth = request.headers.get("authorization", "")
+        ok = False
+        if auth.lower().startswith("basic "):
+            try:
+                _, _, pw = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
+                ok = secrets.compare_digest(pw, clave)
+            except Exception:  # noqa: BLE001
+                ok = False
+        if not ok:
+            return Response("Se necesita la contraseña de acceso", status_code=401,
+                            headers={"WWW-Authenticate": 'Basic realm="Motor OCR", charset="UTF-8"'})
+    return await call_next(request)
 DIR_MUESTRAS = RAIZ / "muestras"
 ANCHO_VISTA = 1400  # px de ancho de la imagen que se manda al navegador
 

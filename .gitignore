@@ -8,3 +8,4 @@ tests/escaneos/*.jpg
 
 .vercel
 tests/formatos_nuevos/*.png
+herramientas/
