@@ -250,7 +250,39 @@ def _campo_region(campo: dict, lineas: list[Linea], opciones: dict) -> dict | No
     return {"value": valor, "tag": campo.get("tag", campo["name"].upper()), "source": _fuente(toks, crudo)}
 
 
+def _campo_respaldo(campo: dict, lineas: list[Linea], opciones: dict) -> dict | None:
+    """Último recurso cuando la etiqueta no se reconoció (OCR): se busca el valor por su
+    propia forma en cada renglón, p. ej. "07 al 23 Abril 2025"."""
+    rx = re.compile(campo["fallbackPattern"], re.IGNORECASE)
+    for l in lineas:
+        m = rx.search(sin_tildes(l.texto))
+        if not m:
+            continue
+        crudo = (m.group(1) if m.groups() else m.group(0)).strip()
+        valor = normalizar(crudo, campo.get("type", "text"), opciones)
+        if valor is None:
+            continue
+        # tokens que cubren el trozo encontrado (para la trazabilidad)
+        pos, toks = 0, []
+        texto = sin_tildes(l.texto)
+        for t in l.tokens:
+            fin = pos + len(t.text)
+            if fin > m.start() and pos < m.end():
+                toks.append(t)
+            pos = fin + 1
+        return {"value": valor, "tag": campo.get("tag", campo["name"].upper()), "source": _fuente(toks or l.tokens, crudo),
+                "fallback": True}
+    return None
+
+
 def extraer_campo(campo: dict, lineas: list[Linea], opciones: dict, limite_y: tuple | None = None) -> dict | None:
+    res = _extraer_campo_ancla(campo, lineas, opciones, limite_y)
+    if res is None and campo.get("fallbackPattern") and lineas and lineas[0].page_ocr:
+        res = _campo_respaldo(campo, lineas, opciones)
+    return res
+
+
+def _extraer_campo_ancla(campo: dict, lineas: list[Linea], opciones: dict, limite_y: tuple | None = None) -> dict | None:
     if "region" in campo and "anchor" not in campo:
         return _campo_region(campo, lineas, opciones)
     anc = campo.get("anchor", {})

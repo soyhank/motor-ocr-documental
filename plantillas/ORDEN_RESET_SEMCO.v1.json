@@ -255,7 +255,8 @@
           "maxDistance": 200
         },
         "type": "period",
-        "required": true
+        "required": true,
+        "fallbackPattern": "(\\d{1,2}/\\d{1,2}/\\d{2,4}\\s*al\\s*\\d{1,2}/\\d{1,2}/\\d{2,4})"
       },
       {
         "name": "observaciones",

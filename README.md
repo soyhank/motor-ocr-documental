@@ -67,4 +67,8 @@ Lo que falla en limpio/normal son casi siempre espacios dentro de nombres («CHE
 
 ## Despliegue
 
-La interfaz web no guarda estado en el servidor: el navegador conserva los resultados y las imágenes, y las revisiones entre documentos (duplicados, audios) y el Excel se piden con los resultados ya extraídos. Por eso funciona igual en local y en Vercel (`api/index.py` + `vercel.json`, Python 3.12, `maxDuration` 300 s). En Vercel cada petición acepta hasta 4,5 MB, así que el navegador sube los archivos por tandas.
+En producción: **https://motor-ocr-documental.vercel.app** (proyecto `motor-ocr-documental` de Vercel, Python 3.12, entrada `main.py`, `maxDuration` 300 s, funciones grandes activadas porque el paquete con OCR pasa de 500 MB).
+
+La interfaz web no guarda estado en el servidor: el navegador conserva los resultados y las imágenes, y las revisiones entre documentos (duplicados, audios) y el Excel se piden con los resultados ya extraídos. Por eso funciona igual en local y en Vercel. Límites de Vercel: 4,5 MB por petición (el navegador sube los archivos por tandas y convierte a JPEG las imágenes escaneadas de más de 3 MB) y unos 30-40 s de OCR por página escaneada; un PDF digital tarda uno o dos segundos.
+
+Para desplegar una versión nueva: `vercel deploy --prod --yes --scope soyhanks-projects` desde una copia sin `.git` (el plan Hobby bloquea los despliegues desde Git cuando el autor del commit no es el dueño del proyecto).

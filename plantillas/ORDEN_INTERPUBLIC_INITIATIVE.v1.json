@@ -177,7 +177,8 @@
           "maxDistance": 300
         },
         "type": "period",
-        "splitAs": "campana"
+        "splitAs": "campana",
+        "fallbackPattern": "(\\d{1,2}/\\d{1,2}/\\d{2,4}\\s*al\\s*\\d{1,2}/\\d{1,2}/\\d{2,4})"
       },
       {
         "name": "mes",

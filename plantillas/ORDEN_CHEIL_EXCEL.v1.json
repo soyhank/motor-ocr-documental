@@ -62,7 +62,8 @@
           "maxGap": 200
         },
         "type": "date",
-        "required": true
+        "required": true,
+        "fallbackPattern": "(\\d{1,2}\\s*de\\s*(?:ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SET|SEP|OCT|NOV|DIC)[A-Z0]{0,7}\\s*de\\s*\\d{4})"
       },
       {
         "name": "agencia",

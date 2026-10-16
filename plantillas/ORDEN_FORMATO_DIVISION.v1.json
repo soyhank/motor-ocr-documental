@@ -64,7 +64,8 @@
           "maxDistance": 200
         },
         "type": "date",
-        "required": true
+        "required": true,
+        "fallbackPattern": "((?:ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SET|SEP|OCT|NOV|DIC)[A-Z0]{0,7}\\s*\\d{1,2}\\s*,\\s*\\d{4})"
       },
       {
         "name": "division",
@@ -230,7 +231,8 @@
           "maxDistance": 200
         },
         "type": "period",
-        "required": true
+        "required": true,
+        "fallbackPattern": "(\\d{1,2}\\s*al\\s*\\d{1,2}\\s*(?:ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SET|SEP|OCT|NOV|DIC)[A-Z0]{0,7}\\.?\\s*\\d{4})"
       },
       {
         "name": "emitido_por",
