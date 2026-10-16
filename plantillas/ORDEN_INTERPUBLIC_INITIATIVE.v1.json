@@ -1,0 +1,376 @@
+{
+  "templateId": "ORDEN_INTERPUBLIC_INITIATIVE",
+  "version": 1,
+  "status": "active",
+  "documentType": "ORDEN_PUBLICIDAD",
+  "description": "Orden de publicidad de Interpublic / Initiative (cuadro con Programa, Tema, Seg, N° Spots y bloque Totales).",
+  "identification": {
+    "minScoreThreshold": 80,
+    "rules": [
+      {
+        "type": "exact_text",
+        "value": "ORDEN DE PUBLICIDAD Nro",
+        "weight": 35
+      },
+      {
+        "type": "exact_text",
+        "value": "Tipo de compra",
+        "weight": 20
+      },
+      {
+        "type": "fuzzy_text",
+        "value": "Fechas de Campa",
+        "weight": 15
+      },
+      {
+        "type": "exact_text",
+        "value": "Burst:",
+        "weight": 15
+      },
+      {
+        "type": "exact_text",
+        "value": "Total Avisos",
+        "weight": 15
+      }
+    ]
+  },
+  "options": {
+    "decimalSeparator": "auto"
+  },
+  "header": {
+    "fields": [
+      {
+        "name": "numero_orden",
+        "tag": "ORDEN_NUMERO",
+        "anchor": {
+          "pattern": "ORDEN DE PUBLICIDAD Nro\\.:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 120
+        },
+        "valuePattern": "^(\\d+)",
+        "required": true
+      },
+      {
+        "name": "revision",
+        "tag": "ORDEN_REVISION",
+        "anchor": {
+          "pattern": "ORDEN DE PUBLICIDAD Nro\\.:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 120
+        },
+        "valuePattern": "/\\s*(\\d+)"
+      },
+      {
+        "name": "fecha_emision",
+        "tag": "ORDEN_FECHA",
+        "anchor": {
+          "pattern": "Fecha de emisi[oó]n:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 120
+        },
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "tipo_compra",
+        "tag": "TIPO_COMPRA",
+        "anchor": {
+          "pattern": "Tipo de compra:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 150
+        }
+      },
+      {
+        "name": "agencia",
+        "tag": "AGENCIA_NOMBRE",
+        "region": {
+          "page": 1,
+          "x1": 450,
+          "y0": 68,
+          "y1": 90
+        },
+        "lineIndex": 0,
+        "required": true
+      },
+      {
+        "name": "agencia_direccion",
+        "tag": "AGENCIA_DIRECCION",
+        "region": {
+          "page": 1,
+          "x1": 450,
+          "y0": 90,
+          "y1": 109
+        },
+        "lineIndex": 0
+      },
+      {
+        "name": "agencia_telefono",
+        "tag": "AGENCIA_TELEFONO",
+        "region": {
+          "page": 1,
+          "x1": 450,
+          "y0": 109,
+          "y1": 130
+        },
+        "lineIndex": 0
+      },
+      {
+        "name": "proveedor",
+        "tag": "PROVEEDOR_NOMBRE",
+        "anchor": {
+          "pattern": "AT:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 300,
+          "stopPattern": null
+        },
+        "valuePattern": "^(.*?)\\s*RUC"
+      },
+      {
+        "name": "proveedor_ruc",
+        "tag": "PROVEEDOR_RUC",
+        "anchor": {
+          "pattern": "AT:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 300,
+          "stopPattern": null
+        },
+        "valuePattern": "RUC:?\\s*(\\d{11})",
+        "type": "ruc"
+      },
+      {
+        "name": "proveedor_direccion",
+        "tag": "PROVEEDOR_DIRECCION",
+        "anchor": {
+          "pattern": "AD:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 300
+        }
+      },
+      {
+        "name": "anunciante",
+        "tag": "ANUNCIANTE_NOMBRE",
+        "anchor": {
+          "pattern": "Anunciante:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 380
+        },
+        "valuePattern": "^(.*?)\\s*-\\s*RUC",
+        "required": true
+      },
+      {
+        "name": "anunciante_ruc",
+        "tag": "ANUNCIANTE_RUC",
+        "anchor": {
+          "pattern": "Anunciante:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 380
+        },
+        "valuePattern": "RUC\\s*N?.?\\s*(\\d{11})",
+        "type": "ruc"
+      },
+      {
+        "name": "campana_fechas",
+        "tag": "CAMPANA_FECHAS",
+        "anchor": {
+          "pattern": "Fechas de Campa[ñn]i?a:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 300
+        },
+        "type": "period",
+        "splitAs": "campana"
+      },
+      {
+        "name": "mes",
+        "tag": "MES",
+        "anchor": {
+          "pattern": "Mes:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "month",
+        "required": true
+      },
+      {
+        "name": "producto",
+        "tag": "PRODUCTO",
+        "anchor": {
+          "pattern": "Producto:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 380
+        }
+      },
+      {
+        "name": "campana",
+        "tag": "CAMPANA",
+        "anchor": {
+          "pattern": "Campaign:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 380
+        }
+      },
+      {
+        "name": "medio",
+        "tag": "MEDIO",
+        "anchor": {
+          "pattern": "Medio:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 380
+        },
+        "required": true
+      },
+      {
+        "name": "burst",
+        "tag": "BURST",
+        "anchor": {
+          "pattern": "Burst:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 420
+        }
+      },
+      {
+        "name": "materiales",
+        "tag": "MATERIALES",
+        "anchor": {
+          "pattern": "Materiales:",
+          "searchDirection": "DOWN",
+          "maxDistance": 40,
+          "xExtra": 250
+        }
+      },
+      {
+        "name": "acuerdo",
+        "tag": "ACUERDO_COMERCIAL",
+        "anchor": {
+          "pattern": "Esta orden est[aá] vinculada",
+          "searchDirection": "LINE"
+        }
+      },
+      {
+        "name": "emitido_por",
+        "tag": "EMITIDO_POR",
+        "anchor": {
+          "pattern": "Emitida por:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 300
+        }
+      }
+    ]
+  },
+  "detail": {
+    "isTable": true,
+    "headerAnchors": [
+      {
+        "name": "descripcion",
+        "pattern": "Programa"
+      },
+      {
+        "name": "tema",
+        "pattern": "Tema"
+      },
+      {
+        "name": "duracion",
+        "pattern": "Seg",
+        "type": "duration"
+      },
+      {
+        "name": "total_avisos",
+        "pattern": "N[o°] Spots",
+        "type": "int"
+      },
+      {
+        "name": "costo_unitario",
+        "pattern": "Costo Neto x",
+        "type": "money"
+      },
+      {
+        "name": "costo_total",
+        "pattern": "Costo Total Neto",
+        "type": "money"
+      }
+    ],
+    "dayColumns": true,
+    "rowMode": "line",
+    "sectionRows": true,
+    "stopAnchor": "TOTALES",
+    "descriptionFields": {
+      "horario": {
+        "pattern": "\\(([^)]*)\\)",
+        "type": "schedule"
+      }
+    },
+    "bonusPattern": "BONIFICAD",
+    "calendarFrom": [
+      "mes",
+      "fecha_emision"
+    ]
+  },
+  "totals": {
+    "searchBelowTable": true,
+    "fields": [
+      {
+        "name": "total_avisos",
+        "tag": "TOT_AVISOS",
+        "anchor": {
+          "pattern": "Total Avisos:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "int"
+      },
+      {
+        "name": "igv_pct",
+        "tag": "TOT_IGV_TASA",
+        "anchor": {
+          "pattern": "IGV Aplicado:(\\s*:)?",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "percent"
+      },
+      {
+        "name": "neto",
+        "tag": "TOT_NETO",
+        "anchor": {
+          "pattern": "Costo Neto:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "money",
+        "required": true
+      },
+      {
+        "name": "igv",
+        "tag": "TOT_IGV",
+        "anchor": {
+          "pattern": "Costo IGV:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "money",
+        "required": true
+      },
+      {
+        "name": "total",
+        "tag": "TOT_TOTAL",
+        "anchor": {
+          "pattern": "Costo Total:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "money",
+        "required": true
+      },
+      {
+        "name": "moneda",
+        "tag": "MONEDA",
+        "anchor": {
+          "pattern": "Moneda:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "currency"
+      }
+    ]
+  },
+  "validations": []
+}

@@ -1,0 +1,6 @@
+salida/
+cola_aprendizaje/
+__pycache__/
+.pytest_cache/
+.vercel/
+tests/escaneos/*.png

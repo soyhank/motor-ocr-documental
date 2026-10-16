@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motor OCR Documental</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#1c2230; --muted:#5d6678; --line:#e1e4ea;
+  --accent:#1f4fd1; --accent-soft:#e7edfc;
+  --ok:#1e7a46; --ok-bg:#e3f4ea; --warn:#8a5a00; --warn-bg:#fff3d6; --bad:#b4232c; --bad-bg:#fde6e7;
+  --new:#5b3cc4; --new-bg:#eee8fd; --box:rgba(31,79,209,.07); --box-line:rgba(31,79,209,.45); --box-hot:rgba(255,170,0,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#12151c; --panel:#1b2029; --ink:#e7eaf0; --muted:#9aa3b5; --line:#2c3340;
+    --accent:#7ea0ff; --accent-soft:#232c45; --ok:#6fd39a; --ok-bg:#16301f; --warn:#f0c46a; --warn-bg:#352a12;
+    --bad:#ff8a90; --bad-bg:#3a1a1d; --new:#b7a4ff; --new-bg:#2a2245; --box:rgba(126,160,255,.12); --box-line:rgba(126,160,255,.6)}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;font-weight:650}
+header .sub{color:var(--muted);font-size:12px}
+.sp{flex:1}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-flex;gap:6px;align-items:center}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled,.btn.off{opacity:.5;cursor:default;pointer-events:none}
+main{padding:16px 20px;max-width:1500px;margin:0 auto}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);background:var(--panel)}
+.drop.on{border-color:var(--accent);background:var(--accent-soft)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;align-items:center}
+.chip{padding:6px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--panel);border:1px solid var(--line)}
+.s-COMPLETED{background:var(--ok-bg);color:var(--ok)} .s-COMPLETED_WITH_WARNINGS{background:var(--warn-bg);color:var(--warn)}
+.s-VALIDATION_FAILED,.s-ERROR{background:var(--bad-bg);color:var(--bad)} .s-TEMPLATE_NOT_IDENTIFIED{background:var(--new-bg);color:var(--new)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table{border-collapse:collapse;width:100%}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--panel);position:sticky;top:0}
+tbody tr.click{cursor:pointer} tbody tr.click:hover{background:var(--accent-soft)}
+tr.sel{background:var(--accent-soft)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:650;white-space:nowrap}
+.muted{color:var(--muted)}
+.wrap{overflow:auto}
+#detalle{display:none;margin-top:16px;gap:16px;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+#detalle.on{display:grid;align-items:start}
+#detalle>.card:first-child{position:sticky;top:76px}
+.visor{position:relative;background:#fff;border-bottom:1px solid var(--line)}
+.visor img{width:100%;display:block}
+.bx{position:absolute;border:1px solid var(--box-line);background:var(--box);border-radius:2px;pointer-events:none}
+.bx.hot{background:var(--box-hot);border-color:#ff9800;border-width:2px}
+.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 14px;color:var(--muted)}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.panel{padding:12px 14px;max-height:78vh;overflow:auto}
+dl{display:grid;grid-template-columns:minmax(120px,38%) 1fr;margin:0}
+dt,dd{padding:6px 4px;border-bottom:1px solid var(--line);margin:0}
+dt{color:var(--muted);font-size:12px}
+dd{word-break:break-word}
+.campo{cursor:default} .campo:hover{background:var(--accent-soft)}
+h3{font-size:13px;margin:16px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.grid-dias{font-size:11px}
+.grid-dias td,.grid-dias th{padding:3px 4px;text-align:center;min-width:22px}
+.grid-dias td.v{background:var(--accent-soft);font-weight:650}
+.val{display:flex;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line)}
+.val .ic{width:22px;flex:none;text-align:center;font-weight:700}
+.ic.p{color:var(--ok)} .ic.f{color:var(--bad)} .ic.w{color:var(--warn)} .ic.s{color:var(--muted)}
+.val code{font-size:11px;color:var(--muted);word-break:break-all}
+pre{font-size:11px;white-space:pre-wrap;word-break:break-all;margin:0}
+.pager{display:flex;gap:6px;padding:8px 10px;align-items:center;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.nav{display:flex;gap:6px;margin:6px 0 14px}
+.nav button.on{background:var(--accent-soft);border-color:var(--accent)}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:g 0.8s linear infinite;vertical-align:-2px}
+@keyframes g{to{transform:rotate(360deg)}}
+.prog{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:10px}
+.prog>div{height:100%;background:var(--accent);width:0;transition:width .3s}
+@media (max-width:900px){#detalle.on{grid-template-columns:1fr} #detalle>.card:first-child{position:static} main{padding:12px 16px} header{padding:12px 16px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Motor OCR Documental</h1>
+    <div class="sub">Órdenes de agencia · extracción determinista con plantillas, sin IA de pago</div>
+  </div>
+  <div class="sp"></div>
+  <label class="btn primary" for="archivos">Subir órdenes</label>
+  <input id="archivos" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.mp3,.wav,.m4a,.ogg" hidden>
+  <button id="btnMuestras">Procesar muestras</button>
+  <button id="btnExcel" disabled>Descargar Excel</button>
+</header>
+<main>
+  <div class="nav"><button class="on" data-vista="ordenes">Órdenes</button><button data-vista="plantillas">Plantillas</button></div>
+
+  <section id="vOrdenes">
+    <div class="drop" id="drop">Arrastra aquí los PDF de las órdenes (también imágenes escaneadas y el audio del spot para cruzar su duración)
+      <div class="prog" id="prog" hidden><div></div></div></div>
+    <div class="chips" id="chips"></div>
+    <div class="card wrap" id="lista"><div class="empty">Aún no hay órdenes procesadas.</div></div>
+    <div id="detalle">
+      <div class="card">
+        <div class="pager" id="pager"></div>
+        <div class="visor" id="visor"></div>
+      </div>
+      <div class="card">
+        <div class="tabs" id="tabs">
+          <button data-t="datos" class="on">Datos</button><button data-t="pauta">Pauta</button>
+          <button data-t="val">Validaciones</button><button data-t="json">JSON</button>
+        </div>
+        <div class="panel" id="panel"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="vPlantillas" hidden>
+    <div class="card wrap" id="plantillas"></div>
+    <p class="muted">Cada plantilla es un JSON en la carpeta <code>plantillas/</code>. Se recargan solas al guardar, sin reiniciar el servicio.
+    Si llega un formato nuevo, la orden aparece como «Formato nuevo» y desde su ficha se descarga un borrador de plantilla y el texto para calibrarla.</p>
+  </section>
+</main>
+<script>
+const ESTADO = {COMPLETED:"Correcto", COMPLETED_WITH_WARNINGS:"Con observaciones", VALIDATION_FAILED:"No cuadra",
+  TEMPLATE_NOT_IDENTIFIED:"Formato nuevo", ERROR:"Error de lectura"};
+const ETIQ = {numero_orden:"N° de orden", revision:"Revisión", fecha_emision:"Fecha de emisión", division:"División",
+  estado:"Estado", tipo_compra:"Tipo de compra", agencia:"Agencia", agencia_ruc:"RUC agencia", agencia_direccion:"Dirección agencia",
+  agencia_telefono:"Teléfono agencia", anunciante:"Anunciante", anunciante_ruc:"RUC anunciante", anunciante_direccion:"Dirección anunciante",
+  producto:"Producto", campana:"Campaña", motivo:"Motivo", medio:"Medio / emisora", tipo_medio:"Tipo de medio", proveedor:"Proveedor",
+  proveedor_real:"Proveedor real", proveedor_ruc:"RUC proveedor", proveedor_direccion:"Dirección proveedor", ciudad:"Cobertura",
+  contrato:"Contrato", tipo_contrato:"Tipo de contrato", condicion_pago:"Condición de pago", referencia:"Referencia",
+  plan:"Plan", presupuesto:"Presupuesto", pauta:"Pauta", periodo_inicio:"Periodo desde", periodo_fin:"Periodo hasta", mes:"Mes",
+  campana_inicio:"Campaña desde", campana_fin:"Campaña hasta", burst:"Burst", materiales:"Materiales", acuerdo:"Acuerdo",
+  moneda:"Moneda", observaciones:"Observaciones", facturar_a:"Facturar a", emitido_por:"Emitido por", area_emisora:"Área",
+  duracion_material:"Duración del material (s)", condiciones_paquete:"Condiciones del paquete",
+  costo:"Costo", recargo:"Recargo", descuento:"Descuento", neto:"Neto", igv_pct:"Tasa IGV", igv:"IGV", total:"Total", total_avisos:"Total de avisos"};
+const AUDIO = /\.(mp3|wav|m4a|ogg|aac|flac|wma)$/i;
+const MAX_LOTE_BYTES = 3.5 * 1024 * 1024, MAX_LOTE_ARCHIVOS = 4;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = (v, k) => {
+  if (v === null || v === undefined || v === "") return '<span class="muted">—</span>';
+  if (k === "igv_pct") return (v*100).toFixed(2) + " %";
+  if (typeof v === "number") return v.toLocaleString("es-PE", {minimumFractionDigits: Number.isInteger(v) && !/costo|neto|igv|total$/.test(k||"") ? 0 : 2, maximumFractionDigits: 4});
+  return esc(v).replace(/\n/g, "<br>");
+};
+let lote = [], archivos = {}, actual = null, pagina = 1, tab = "datos", ocupado = false;
+
+// ------------------------------------------------------------ procesamiento
+function sinImagenes(r){ return {...r, pages: (r.pages||[]).map(p => ({...p, image: undefined}))}; }
+function duracionAudio(file){
+  return new Promise(res => { const a = document.createElement("audio"); const u = URL.createObjectURL(file);
+    a.onloadedmetadata = () => { res(a.duration); URL.revokeObjectURL(u); }; a.onerror = () => res(null); a.src = u; });
+}
+function progreso(hecho, total, texto){
+  const p = $("#prog"); p.hidden = total === 0; p.firstElementChild.style.width = total ? (100*hecho/total) + "%" : "0";
+  if (texto) $("#drop").firstChild.textContent = texto;
+}
+async function subir(files){
+  files = [...files]; if (!files.length || ocupado) return;
+  ocupado = true; $("#detalle").classList.remove("on");
+  const docs = files.filter(f => !AUDIO.test(f.name)), audios = files.filter(f => AUDIO.test(f.name));
+  docs.forEach(f => archivos[f.name] = f);
+  const lotes = []; let act = [], bytes = 0;
+  for (const f of docs){
+    if (act.length && (act.length >= MAX_LOTE_ARCHIVOS || bytes + f.size > MAX_LOTE_BYTES)){ lotes.push(act); act = []; bytes = 0; }
+    act.push(f); bytes += f.size;
+  }
+  if (act.length) lotes.push(act);
+  let hecho = 0; progreso(0, docs.length, `Procesando 0 de ${docs.length}…`);
+  for (const l of lotes){
+    const fd = new FormData(); l.forEach(f => fd.append("archivos", f));
+    try {
+      const r = await fetch("/api/procesar", {method:"POST", body: fd});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const res = await r.json();
+      res.forEach(x => { if (!x.documentId) x.documentId = "ERR-" + Math.random().toString(36).slice(2); lote.push(x); });
+    } catch (e) {
+      l.forEach(f => lote.push({documentId: "ERR-" + Math.random().toString(36).slice(2), file: f.name, status: "ERROR", error: String(e)}));
+    }
+    hecho += l.length; progreso(hecho, docs.length, `Procesando ${hecho} de ${docs.length}…`); pintarLista();
+  }
+  // revisiones entre documentos (duplicados) y cruce con los audios
+  const infoAudios = [];
+  for (const a of audios) infoAudios.push({file: a.name, seconds: await duracionAudio(a)});
+  try {
+    const r = await fetch("/api/cruzar", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({results: lote.map(sinImagenes), audios: infoAudios})});
+    if (r.ok){ const upd = await r.json(); upd.forEach((u, i) => { if (lote[i] && u.validationReport){ lote[i].status = u.status; lote[i].validationReport = u.validationReport; lote[i].materials = u.materials; } }); }
+  } catch (e) { console.warn("cruce", e); }
+  progreso(0, 0, "Arrastra aquí los PDF de las órdenes (también imágenes escaneadas y el audio del spot para cruzar su duración)");
+  ocupado = false; pintarLista();
+}
+$("#archivos").onchange = e => { subir(e.target.files); e.target.value = ""; };
+$("#btnMuestras").onclick = async () => {
+  if (ocupado) return;
+  const lista = await (await fetch("/api/muestras")).json();
+  if (!lista.length){ alert("Este despliegue no incluye archivos de muestra."); return; }
+  progreso(0, lista.length, "Descargando muestras…");
+  const files = [];
+  for (const m of lista){ const b = await (await fetch("/api/muestras/" + encodeURIComponent(m.name))).blob(); files.push(new File([b], m.name)); }
+  lote = []; archivos = {}; await subir(files);
+};
+const drop = $("#drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.add("on")}));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.remove("on")}));
+drop.addEventListener("drop", e => subir(e.dataTransfer.files));
+
+$("#btnExcel").onclick = async () => {
+  const r = await fetch("/api/excel", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({results: lote.map(sinImagenes)})});
+  if (!r.ok){ alert("No se pudo generar el Excel"); return; }
+  descargar(await r.blob(), "ordenes_extraidas.xlsx");
+};
+function descargar(blob, nombre){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+
+// ------------------------------------------------------------ lista
+function pintarLista(){
+  const cuenta = {}; lote.forEach(d => cuenta[d.status] = (cuenta[d.status]||0) + 1);
+  $("#chips").innerHTML = `<span class="chip">${lote.length} documentos</span>` +
+    Object.entries(cuenta).map(([s,n]) => `<span class="chip s-${s}">${n} ${ESTADO[s]||s}</span>`).join("") +
+    (ocupado ? '<span class="muted"><span class="spin"></span> procesando…</span>' : "");
+  $("#btnExcel").disabled = !lote.some(d => d.extractedData);
+  if (!lote.length){ $("#lista").innerHTML = '<div class="empty">Sin documentos.</div>'; return; }
+  $("#lista").innerHTML = `<table><thead><tr><th>Estado</th><th>Archivo</th><th>Orden</th><th>Agencia</th><th>Anunciante</th>
+    <th>Medio</th><th class="num">Avisos</th><th class="num">Total</th><th>Plantilla</th><th class="num">ms</th></tr></thead><tbody>` +
+    lote.map(d => { const s = d.summary || {}, rep = d.validationReport || {}; return `<tr class="click" data-id="${d.documentId}"><td><span class="badge s-${d.status}">${ESTADO[d.status]||d.status}</span>
+      ${rep.errors ? `<div class="muted">${rep.errors} error(es)</div>` : rep.warnings ? `<div class="muted">${rep.warnings} aviso(s)</div>` : ""}</td>
+      <td>${esc(d.file)}</td><td>${esc(s.numero_orden)}</td><td>${esc(s.agencia)}</td><td>${esc(s.anunciante)}</td><td>${esc(s.medio)}</td>
+      <td class="num">${fmt(s.avisos)}</td><td class="num">${s.total!=null ? (s.moneda==="USD"?"US$ ":"S/ ") + fmt(s.total,"total") : "—"}</td>
+      <td class="muted">${esc((d.template||{}).templateId||"—")}</td><td class="num muted">${(d.metrics||{}).ms??""}</td></tr>`; }).join("") + "</tbody></table>";
+  document.querySelectorAll("#lista tr.click").forEach(tr => tr.onclick = () => abrir(tr.dataset.id));
+  if (actual) document.querySelectorAll("#lista tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === actual.documentId));
+}
+
+// ------------------------------------------------------------ ficha
+function abrir(id){
+  actual = lote.find(d => d.documentId === id); if (!actual) return;
+  document.querySelectorAll("#lista tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === id));
+  pagina = 1; $("#detalle").classList.add("on"); pintarVisor(); pintarPanel();
+  $("#detalle").scrollIntoView({behavior:"smooth", block:"start"});
+}
+function fuentes(){
+  const out = []; const d = actual.extractedData || {};
+  for (const sec of ["header","totals"]) for (const [k,v] of Object.entries(d[sec]||{})) if (v && v.source) out.push({k:sec+"."+k, s:v.source});
+  (d.detail||[]).forEach((f,i) => { for (const [k,v] of Object.entries(f)) if (v && v.source && k!=="programacion") out.push({k:`fila${i}.${k}`, s:v.source});
+    (f.programacion||[]).forEach(p => p.source && out.push({k:`fila${i}.d${p.dia}`, s:p.source})); });
+  return out;
+}
+function pintarVisor(){
+  const pags = actual.pages || []; const n = pags.length;
+  $("#pager").innerHTML = `<strong>${esc(actual.file)}</strong><span class="sp"></span>` +
+    (n>1 ? pags.map((_,i)=>`<button data-p="${i+1}" class="${i+1===pagina?'primary':''}">Pág. ${i+1}</button>`).join("") : "") +
+    `<span class="muted">${pags[pagina-1] ? (pags[pagina-1].source==="ocr"?"escaneado (OCR)":"PDF digital") : ""}</span>`;
+  document.querySelectorAll("#pager button[data-p]").forEach(b => b.onclick = () => {pagina = +b.dataset.p; pintarVisor();});
+  const img = pags[pagina-1] && pags[pagina-1].image;
+  if (!img){ $("#visor").innerHTML = '<div class="empty">Sin vista previa' + (actual.error ? ": " + esc(actual.error) : "") + '</div>'; return; }
+  const cajas = fuentes().filter(f => f.s.page === pagina).map(f => {
+    const b = f.s.bbox; return `<div class="bx" data-k="${f.k}" style="left:${b.x0/10}%;top:${b.y0/10}%;width:${(b.x1-b.x0)/10}%;height:${(b.y1-b.y0)/10}%"></div>`; }).join("");
+  $("#visor").innerHTML = `<img src="${img}" alt="Página ${pagina}">` + cajas;
+}
+function resaltar(k, on){ document.querySelectorAll(`.bx[data-k="${k}"]`).forEach(b => b.classList.toggle("hot", on)); }
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { tab = b.dataset.t;
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x===b)); pintarPanel(); });
+
+async function calibrar(tipo){
+  const f = archivos[actual.file]; if (!f){ alert("Vuelve a subir el archivo para calibrarlo."); return; }
+  const fd = new FormData(); fd.append("archivo", f);
+  const r = await fetch("/api/calibracion?tipo=" + tipo, {method:"POST", body: fd});
+  if (!r.ok){ alert("No se pudo generar"); return; }
+  descargar(await r.blob(), tipo === "prompt" ? "prompt_calibracion.md" : "plantilla_borrador.json");
+}
+function pintarPanel(){
+  const p = $("#panel"); const d = actual.extractedData || {}; const rep = actual.validationReport;
+  if (actual.status === "ERROR"){ p.innerHTML = `<p>No se pudo leer el archivo.</p><pre>${esc(actual.error)}</pre>`; return; }
+  if (actual.status === "TEMPLATE_NOT_IDENTIFIED"){
+    const c = (actual.template && actual.template.candidates && actual.template.candidates[0]) || {};
+    p.innerHTML = `<p>No hay una plantilla que reconozca este formato (mejor puntaje: ${esc(c.templateId)} con ${c.score ?? 0} de ${c.threshold ?? 80}).</p>
+      <p>Pasos para incorporarlo sin tocar código:</p><ol><li>Descarga el borrador automático de plantilla.</li>
+      <li>Opcional: entrega el texto de calibración a un asistente (fuera de producción) para afinarlo.</li>
+      <li>Pruébalo con <code>python -m motor probar plantilla.json archivo.pdf --promover</code>: si los totales cuadran, se activa.</li></ol>
+      <p><button class="primary" id="bBorr">Borrador de plantilla</button> <button id="bPrompt">Texto de calibración</button></p>`;
+    $("#bBorr").onclick = () => calibrar("borrador"); $("#bPrompt").onclick = () => calibrar("prompt");
+    return;
+  }
+  if (tab === "datos"){
+    const bloque = (sec, titulo) => { const e = Object.entries(d[sec]||{}); if (!e.length) return "";
+      return `<h3>${titulo}</h3><dl>` + e.map(([k,v]) => `<dt class="campo" data-k="${sec}.${k}">${ETIQ[k]||k}</dt><dd class="campo" data-k="${sec}.${k}">${fmt(v?.value,k)}</dd>`).join("") + "</dl>"; };
+    p.innerHTML = `<p><span class="badge s-${actual.status}">${ESTADO[actual.status]}</span>
+      <span class="muted">· plantilla ${esc(actual.template.templateId)} v${actual.template.version} · puntaje ${actual.template.score}</span></p>` +
+      bloque("header","Cabecera") + bloque("totals","Totales") +
+      `<p style="margin-top:14px"><button id="bJson">Descargar JSON</button></p>`;
+    $("#bJson").onclick = () => descargar(new Blob([JSON.stringify(sinImagenes(actual), null, 2)], {type:"application/json"}), actual.file.replace(/\.[^.]+$/, "") + ".json");
+  } else if (tab === "pauta"){
+    const filas = d.detail || []; const dias = new Set(); filas.forEach(f => (f.programacion||[]).forEach(x => dias.add(x.dia)));
+    const maxDia = Math.max(28, ...dias); const letras = {};
+    filas.forEach(f => (f.programacion||[]).forEach(x => letras[x.dia] = x.letra));
+    const v = (f,k) => f[k]?.value;
+    p.innerHTML = `<h3>Filas de la orden</h3><div class="wrap"><table><thead><tr><th>#</th><th>Descripción</th><th>Horario</th><th class="num">Dur.</th>
+      <th class="num">Avisos</th><th class="num">C. unit.</th><th class="num">C. total</th></tr></thead><tbody>` +
+      filas.map((f,i) => `<tr class="campo" data-k="fila${i}.descripcion"><td>${i+1}</td><td>${fmt(v(f,"descripcion"))}
+        ${v(f,"seccion")?`<div class="muted">${esc(v(f,"seccion"))}</div>`:""}${v(f,"paquete")?`<div class="muted">Paquete: ${esc(v(f,"paquete"))}</div>`:""}
+        ${v(f,"bonificado")?'<span class="badge s-COMPLETED_WITH_WARNINGS">bonificado</span>':""}${v(f,"es_paquete")?'<span class="badge s-TEMPLATE_NOT_IDENTIFIED">paquete</span>':""}</td>
+        <td>${fmt(v(f,"horario"))}</td><td class="num">${fmt(v(f,"duracion"))}</td><td class="num">${fmt(v(f,"total_avisos"))}</td>
+        <td class="num">${fmt(v(f,"costo_unitario"),"costo")}</td><td class="num">${fmt(v(f,"costo_total"),"costo")}</td></tr>`).join("") +
+      `</tbody></table></div><h3>Avisos por día ${actual.calendar ? `(${String(actual.calendar.month).padStart(2,"0")}/${actual.calendar.year})` : ""}</h3>
+      <div class="wrap"><table class="grid-dias"><thead><tr><th>#</th>${[...Array(maxDia)].map((_,i)=>`<th>${letras[i+1]||""}<br>${i+1}</th>`).join("")}</tr></thead><tbody>` +
+      filas.map((f,i) => { const m = {}; (f.programacion||[]).forEach(x => m[x.dia] = x.avisos);
+        return `<tr><td>${i+1}</td>${[...Array(maxDia)].map((_,j)=>`<td class="${m[j+1]?"v campo":""}" data-k="fila${i}.d${j+1}">${m[j+1]||""}</td>`).join("")}</tr>`; }).join("") +
+      "</tbody></table></div>" +
+      ((actual.materials||[]).length ? `<h3>Material de audio</h3>` + actual.materials.map(m => `<div>${esc(m.file)}: ${m.seconds != null ? m.seconds.toFixed(1) : "?"} s · fila ${m.row} ${m.match?"✓ coincide":"✗ no coincide"}</div>`).join("") : "");
+  } else if (tab === "val"){
+    const ic = r => r.status==="PASSED" ? '<span class="ic p">✓</span>' : r.status==="SKIPPED" ? '<span class="ic s">–</span>' :
+      r.severity==="ERROR" ? '<span class="ic f">✗</span>' : '<span class="ic w">!</span>';
+    const orden = r => r.status==="FAILED" ? (r.severity==="ERROR"?0:1) : r.status==="PASSED" ? 2 : 3;
+    p.innerHTML = `<p>${rep.passed} cumplen · <strong>${rep.errors}</strong> error(es) · <strong>${rep.warnings}</strong> observación(es) · ${rep.skipped} no aplican</p>` +
+      [...rep.executedRules].sort((a,b)=>orden(a)-orden(b)).map(r => `<div class="val">${ic(r)}<div><div>${esc(r.description||r.rule)}${r.row?` <span class="muted">· fila ${r.row}</span>`:""}</div>
+        ${r.detail?`<div>${esc(r.detail)}</div>`:""}${r.status==="FAILED"&&r.difference!=null&&!r.detail?`<div>Diferencia: ${r.difference} (${r.left} vs ${r.right})</div>`:""}
+        <code>${esc(r.rule)}</code></div></div>`).join("");
+  } else {
+    p.innerHTML = `<pre>${esc(JSON.stringify(sinImagenes(actual), null, 2))}</pre>`;
+  }
+  p.querySelectorAll(".campo[data-k]").forEach(el => { el.onmouseenter = () => resaltar(el.dataset.k, true); el.onmouseleave = () => resaltar(el.dataset.k, false); });
+}
+
+document.querySelectorAll(".nav button").forEach(b => b.onclick = async () => {
+  document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("on", x===b));
+  $("#vOrdenes").hidden = b.dataset.vista !== "ordenes"; $("#vPlantillas").hidden = b.dataset.vista !== "plantillas";
+  if (b.dataset.vista === "plantillas"){
+    const ps = await (await fetch("/api/plantillas")).json();
+    $("#plantillas").innerHTML = `<table><thead><tr><th>Plantilla</th><th>Versión</th><th>Formato que reconoce</th><th class="num">Campos</th><th class="num">Columnas</th><th>Archivo</th></tr></thead><tbody>` +
+      ps.map(t => `<tr><td><strong>${esc(t.templateId)}</strong></td><td>v${t.version}</td><td>${esc(t.description)}</td><td class="num">${t.campos}</td><td class="num">${t.columnas}</td><td class="muted">${esc(t.archivo)}</td></tr>`).join("") + "</tbody></table>";
+  }
+});
+</script>
+</body>
+</html>

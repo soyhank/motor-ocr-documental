@@ -1,0 +1,13 @@
+pdfplumber==0.11.10
+pymupdf==1.28.0
+numpy>=1.26,<3
+opencv-python-headless>=4.9,<5
+rapidocr-onnxruntime==1.4.4
+onnxruntime>=1.17,<2
+rapidfuzz>=3.0
+openpyxl>=3.1
+mutagen>=1.47
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+pydantic>=2.0

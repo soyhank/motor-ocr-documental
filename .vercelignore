@@ -1,0 +1,7 @@
+tests/escaneos
+salida
+cola_aprendizaje
+_scripts
+*.docx
+__pycache__
+.pytest_cache

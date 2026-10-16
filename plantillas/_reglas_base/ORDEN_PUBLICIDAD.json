@@ -1,0 +1,21 @@
+[
+  {"id": "FILA_DIAS", "scope": "row", "rule": "SUM(row.dias) == row.total_avisos", "severity": "ERROR",
+   "description": "Los avisos de cada día suman el total de la fila"},
+  {"id": "FILA_COSTO", "scope": "row", "rule": "row.total_avisos * row.costo_unitario == row.costo_total",
+   "tolerance": 0.05, "toleranceRel": 0.0001, "severity": "ERROR", "skipIf": ["es_paquete"],
+   "description": "Avisos por costo unitario da el costo de la fila"},
+  {"id": "DETALLE_VS_COSTO", "rule": "SUM(detail.costo_total) == COALESCE(totals.costo, totals.neto)", "tolerance": 0.05,
+   "severity": "ERROR", "description": "La suma de las filas es igual al costo de la orden"},
+  {"id": "NETO", "rule": "COALESCE(totals.costo, SUM(detail.costo_total)) - COALESCE(totals.descuento, 0) + COALESCE(totals.recargo, 0) == totals.neto",
+   "tolerance": 0.05, "severity": "ERROR", "description": "Costo menos descuento más recargo da el neto"},
+  {"id": "IGV", "rule": "totals.neto * COALESCE(totals.igv_pct, 0.18) == totals.igv", "tolerance": 0.05,
+   "severity": "ERROR", "description": "El IGV es el porcentaje indicado del neto"},
+  {"id": "IGV_18", "rule": "COALESCE(totals.igv_pct, 0.18) == 0.18", "tolerance": 0.0001,
+   "severity": "WARNING", "description": "La tasa de IGV es 18 %"},
+  {"id": "TOTAL", "rule": "totals.neto + totals.igv == totals.total", "tolerance": 0.05,
+   "severity": "ERROR", "description": "Neto más IGV da el total"},
+  {"id": "AVISOS", "rule": "SUM(detail.total_avisos) == COALESCE(totals.total_avisos, footer.total_avisos)",
+   "severity": "ERROR", "description": "La suma de avisos de las filas es igual al total de avisos"},
+  {"id": "PIE_COSTO", "rule": "SUM(detail.costo_total) == footer.costo_total", "tolerance": 0.05,
+   "severity": "ERROR", "description": "La suma de las filas es igual al total del pie de la tabla"}
+]
