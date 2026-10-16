@@ -59,11 +59,11 @@ Medición con `_scripts/generar_escaneos.py` + `_scripts/benchmark_escaneos.py` 
 
 | Variante | Condiciones | Campos exactos |
 |---|---|---|
-| limpio | 300 DPI, sin inclinación | ≈ 98 % |
-| normal | 200 DPI, 1° de inclinación, sombra y ruido | ≈ 95 % |
+| limpio | 300 DPI, sin inclinación | 98,6 % |
+| normal | 200 DPI, 1° de inclinación, sombra y ruido | 96,7 % |
 | malo | 150 DPI, 2,5°, sombra fuerte, ruido y desenfoque | ≈ 50 % (no apto) |
 
-Lo que falla en limpio/normal son casi siempre espacios dentro de nombres («CHEILPERU»); los números, fechas y la grilla de días salen bien. Para escaneos reales conviene 200 DPI o más.
+Lo que falla en limpio/normal son casi siempre tildes o espacios dentro de nombres («PERU», «GRUPORPPSAC»); los números, fechas y la grilla de días salen bien, y cuando un número sale mal la orden queda marcada como «No cuadra». Para escaneos reales conviene 200 DPI o más.
 
 ## Despliegue
 
