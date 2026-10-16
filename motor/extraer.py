@@ -139,7 +139,8 @@ def buscar_anclas(lineas: list[Linea], patron: str, sensible: bool = False, regi
                     # renglones muy juntos en el escaneo
                     mejor, exacta = j, False
                 elif (rx_sin_dp is not None and l.page_ocr and mejor is None and rx_sin_dp.fullmatch(unido)
-                      and (j + 1 >= len(toks) or not toks[j + 1].text.startswith(":"))):
+                      and (j + 1 >= len(toks) or not toks[j + 1].text.startswith(":"))
+                      and (i == 0 or toks[i].x0 - toks[i - 1].x1 > 1.5 * max(toks[i].h, 1))):
                     mejor, exacta = j, False
             if mejor is not None:
                 a = Ancla(toks[i:mejor + 1], l, mejor, exacta)
@@ -370,6 +371,7 @@ def _extraer_campo_ancla(campo: dict, lineas: list[Linea], opciones: dict, limit
             "value": valor,
             "tag": campo.get("tag", campo["name"].upper()),
             "source": _fuente(fuente, crudo),
+            "_ancla": _texto_tokens(a.tokens),  # etiqueta exacta (para aprender plantillas)
         }
     return None
 
@@ -392,7 +394,7 @@ def extraer_campos(campos: list[dict], lineas: list[Linea], opciones: dict, limi
         if v is None and c.get("default") is not None:
             v = {"value": c["default"], "tag": c.get("tag", c["name"].upper()), "source": None, "default": True}
         if v is not None and v.get("source") is not None and lineas and lineas[0].page_ocr                 and (c.get("type") or "text") == "text":
-            canon = canonizar(c["name"], v.get("value"))
+            canon = canonizar(c["name"], v.get("value"), c.get("knownValues"))
             if canon is not None and canon != v["value"]:
                 v["ocrValue"] = v["value"]
                 v["value"] = canon
@@ -775,7 +777,7 @@ def extraer_tabla(doc: Documento, cfg: dict, opciones: dict) -> dict:
         for l in lineas:
             if l.cy <= y_fin + 1:
                 continue
-            if stop.match(sin_tildes(l.texto)):
+            if (stop.search if cfg.get("stopAnywhere") else stop.match)(sin_tildes(l.texto)):
                 linea_stop = l
                 break
             cuerpo.append(l)

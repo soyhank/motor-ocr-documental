@@ -11,17 +11,34 @@ import json
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import os
+
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from . import notificar
 from .calibrar import borrador_plantilla, prompt_llm
 from .exportar import libro
 from .ingesta import ingerir
-from .pipeline import EXT_AUDIO, _estado, cruzar_duplicados, procesar, repo
+from .pipeline import EXT_AUDIO, _estado, _resumen, cruzar_duplicados, procesar, repo
 from .plantillas import RAIZ
+from .salida import revalidar_datos, revalidar_simple, salida_simple
+from .validar import cargar_config
 
-app = FastAPI(title="Motor OCR Documental")
+DESCRIPCION_API = """
+Lee órdenes de publicidad (PDF digitales, escaneados o fotos), las valida y devuelve un JSON
+limpio con **cabecera**, **detalle** y **totales** listo para otro sistema.
+
+* `POST /api/v1/ordenes`: sube un archivo y recibe la orden extraída y validada.
+* `POST /api/v1/ordenes/validar`: envía la orden corregida a mano y recibe la validación al día.
+* `GET /api/v1/plantillas`: formatos de agencia que el motor ya reconoce.
+
+Si la variable de entorno `MOTOR_API_KEY` (o `config.json -> api.claves`) está definida, cada
+llamada a `/api/v1` debe llevar la cabecera `X-API-Key`.
+"""
+
+app = FastAPI(title="Motor OCR Documental", version="2.0", description=DESCRIPCION_API)
 DIR_MUESTRAS = RAIZ / "muestras"
 ANCHO_VISTA = 1400  # px de ancho de la imagen que se manda al navegador
 
@@ -51,16 +68,22 @@ def _imagen_vista(png: bytes | None) -> str | None:
         return None
 
 
-def _procesar_archivo(nombre: str, datos: bytes) -> dict:
+def _procesar_archivo(nombre: str, datos: bytes, con_imagen: bool = True, avisar: bool = True) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         ruta = Path(tmp) / Path(nombre).name
         ruta.write_bytes(datos)
-        r = procesar(ruta, datos, con_imagen=True)
+        r = procesar(ruta, datos, con_imagen=con_imagen)
     doc = r.pop("_doc", None)
-    if doc is not None:
+    if doc is not None and con_imagen:
         for p, info in zip(doc.paginas, r.get("pages", [])):
             info["image"] = _imagen_vista(p.imagen_png)
-    return _publico(r)
+    r = _publico(r)
+    if r.get("documentId") is None:
+        r["documentId"] = None
+    r["salida"] = salida_simple(r)
+    if avisar:
+        r["alerta"] = notificar.enviar(r["salida"])
+    return r
 
 
 @app.get("/")
@@ -74,7 +97,7 @@ def salud():
 
 
 @app.post("/api/procesar")
-async def api_procesar(archivos: list[UploadFile] = File(...)):
+async def api_procesar(archivos: list[UploadFile] = File(...), notificar_: int = Query(1, alias="notificar")):
     """Procesa los archivos de la petición y devuelve el resultado completo de cada uno
     (incluida la imagen de cada página). El cruce entre documentos se hace en /api/cruzar."""
     out = []
@@ -83,10 +106,108 @@ async def api_procesar(archivos: list[UploadFile] = File(...)):
         if Path(a.filename).suffix.lower() in EXT_AUDIO:
             continue
         try:
-            out.append(_procesar_archivo(a.filename, datos))
+            out.append(_procesar_archivo(a.filename, datos, avisar=bool(notificar_)))
         except Exception as e:  # noqa: BLE001
-            out.append({"documentId": None, "file": a.filename, "status": "ERROR", "error": str(e)})
+            r = {"documentId": None, "file": a.filename, "status": "ERROR",
+                 "error": {"code": "INTERNO", "message": f"Error inesperado: {e}"}}
+            r["salida"] = salida_simple(r)
+            out.append(r)
     return JSONResponse(out)
+
+
+class Revalidacion(BaseModel):
+    result: dict
+    corrections: list[dict] = []
+
+
+def _datos_internos(result: dict) -> dict:
+    d = result.get("extractedData") or {}
+    return {"header": d.get("header") or {}, "detail": d.get("detail") or [], "totals": d.get("totals") or {},
+            "footer": d.get("footer") or {}}
+
+
+@app.post("/api/revalidar")
+def api_revalidar(body: Revalidacion):
+    """Corrección manual en pantalla: vuelve a validar con los valores editados."""
+    r = body.result
+    rep, datos = revalidar_datos(_datos_internos(r), (r.get("template") or {}).get("templateId"))
+    r = {**r, "extractedData": {k: datos[k] for k in ("header", "detail", "totals", "footer") if k in datos},
+         "validationReport": rep, "status": _estado(rep), "corrections": body.corrections}
+    if r.get("newFormat") and not (r.get("template") or {}).get("learned") and rep["isValid"]:
+        r["status"] = _estado(rep)  # ya cuadra: se puede guardar como formato aprendido
+    r["summary"] = _resumen(r["extractedData"])
+    r["salida"] = salida_simple(r)
+    return JSONResponse({k: r[k] for k in ("status", "validationReport", "extractedData", "summary", "salida", "corrections")})
+
+
+@app.post("/api/aprender")
+async def api_aprender(archivo: UploadFile = File(...), resultado: str = Form(...)):
+    """Formato nuevo corregido a mano: aprende la plantilla de esa agencia con lo corregido."""
+    from .generica import aprender_de_correccion, guardar_plantilla
+
+    r = json.loads(resultado)
+    datos = await archivo.read()
+    with tempfile.TemporaryDirectory() as tmp:
+        ruta = Path(tmp) / Path(archivo.filename).name
+        ruta.write_bytes(datos)
+        doc = ingerir(ruta, datos)
+    cab = {k: (v.get("value") if isinstance(v, dict) else v) for k, v in ((r.get("extractedData") or {}).get("header") or {}).items()}
+    nueva = aprender_de_correccion(doc, cab, r.get("corrections"), cargar_config())
+    guardada = guardar_plantilla(nueva)
+    if not guardada:
+        raise HTTPException(503, "Este servidor no permite guardar plantillas (solo lectura)")
+    repo().recargar()
+    return {"templateId": nueva["templateId"], "version": nueva["version"], "savedAs": guardada,
+            "campos": len(nueva["header"]["fields"]), "reglas": nueva["identification"]["rules"]}
+
+
+# ------------------------------------------------------------------ API para integrar con otros sistemas
+
+def _clave_api(x_api_key: str | None = Header(None)):
+    claves = set(filter(None, [os.environ.get("MOTOR_API_KEY")] + list((cargar_config().get("api") or {}).get("claves") or [])))
+    if claves and x_api_key not in claves:
+        raise HTTPException(401, "Falta la cabecera X-API-Key o no es válida")
+
+
+@app.get("/api/v1/salud", tags=["API v1"], dependencies=[Depends(_clave_api)])
+def v1_salud():
+    return {"ok": True, "plantillas": len(repo().todas()), "version": app.version}
+
+
+@app.post("/api/v1/ordenes", tags=["API v1"], dependencies=[Depends(_clave_api)])
+async def v1_ordenes(archivo: UploadFile = File(..., description="PDF, JPG, PNG o TIFF de la orden"),
+                     formato: str = Query("simple", description="'simple' (cabecera, detalle, totales) o 'completo' (con trazabilidad)"),
+                     notificar_: bool = Query(True, alias="notificar", description="enviar alerta si la orden falla")):
+    """Procesa una orden y devuelve el JSON limpio (o el completo con `formato=completo`)."""
+    datos = await archivo.read()
+    try:
+        r = _procesar_archivo(archivo.filename, datos, con_imagen=False, avisar=notificar_)
+    except Exception as e:  # noqa: BLE001
+        r = {"documentId": None, "file": archivo.filename, "status": "ERROR",
+             "error": {"code": "INTERNO", "message": f"Error inesperado: {e}"}}
+        r["salida"] = salida_simple(r)
+    if formato == "completo":
+        return JSONResponse(r)
+    return JSONResponse(r["salida"])
+
+
+@app.post("/api/v1/ordenes/validar", tags=["API v1"], dependencies=[Depends(_clave_api)])
+def v1_validar(orden: dict):
+    """Recibe la orden en el formato limpio (por ejemplo, corregida por un asesor) y devuelve
+    la misma orden con la validación y el estado recalculados."""
+    out = revalidar_simple(orden)
+    return JSONResponse(out)
+
+
+@app.get("/api/v1/plantillas", tags=["API v1"], dependencies=[Depends(_clave_api)])
+def v1_plantillas():
+    return api_plantillas()
+
+
+@app.post("/api/notificaciones/prueba")
+def api_prueba_alerta(webhook: str | None = None):
+    """Envía una alerta de prueba a los destinos configurados."""
+    return notificar.probar(webhook)
 
 
 class Lote(BaseModel):
@@ -187,6 +308,7 @@ def api_muestra(nombre: str):
 @app.get("/api/plantillas")
 def api_plantillas():
     return [{"templateId": p["templateId"], "version": p.get("version", 1), "description": p.get("description"),
+             "aprendida": p.get("origin") == "auto", "aprendidaDe": (p.get("learnedFrom") or {}).get("file"),
              "archivo": p.get("_archivo"), "campos": len(p.get("header", {}).get("fields", [])) +
              len(p.get("totals", {}).get("fields", [])),
              "columnas": len(p.get("detail", {}).get("headerAnchors", []))} for p in repo().todas()]

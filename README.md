@@ -16,7 +16,7 @@ python -m motor procesar muestras/ --salida salida
 python -m motor web          # http://127.0.0.1:8765
 
 # pruebas de regresión con los 14 PDF de muestra (valores verificados a mano)
-python -m pytest tests -q
+python -m pytest tests -q          # 27 pruebas
 ```
 
 La salida trae un JSON por documento (formato de la sección 7 de la especificación: valor, tag, página, texto crudo y bbox de cada campo) y un Excel con las hojas Órdenes, Detalle, Programación (un renglón por día) y Validaciones.
@@ -39,17 +39,78 @@ Las plantillas se recargan al guardarlas, sin reiniciar. Las reglas aritméticas
 - Negocio: RUC con dígito verificador SUNAT; orden emitida a Grupo RPP (`config.json`); los días de la semana del cuadro corresponden al mes; avisos dentro del periodo; pauta dentro de las fechas de campaña; orden emitida antes del primer aviso; horario en cada fila; bonificación declarada («Bonificados del 20 %»).
 - Lote: archivos u órdenes duplicadas; duración del audio del spot frente a la duración pautada (por nombre del archivo y motivo).
 
-## Formato nuevo (auto-calibración offline)
+## Formato nuevo: se aprende solo
 
-Si ninguna plantilla llega al umbral, el documento queda como `TEMPLATE_NOT_IDENTIFIED` y su volcado espacial se guarda en `cola_aprendizaje/`.
+Si ninguna plantilla llega al umbral, la orden no se descarta (`motor/generica.py`):
+
+1. Se lee con una **plantilla genérica de sinónimos** (`ORDEN N°`, `N° de Orden`, `Fecha de emisión`, `Señores`, `Atención`, `Tarifa`, `Valor venta`, `I.G.V.`, `Importe total`…), también cuando las etiquetas van encima del valor (recuadros). Para la tabla se prueban varias formas de leer las filas y para los totales todas las combinaciones de candidatos: gana la que hace cuadrar la aritmética.
+2. Los roles se resuelven con datos conocidos: el RUC y los nombres de Grupo RPP marcan al proveedor, `catalogo.json` y el membrete (el texto más grande de arriba) a la agencia, y cada RUC se asigna al nombre más cercano.
+3. **Si las validaciones cuadran**, se guarda una plantilla propia de esa agencia (`plantillas/AUTO_<AGENCIA>.v1.json`, con `"origin": "auto"`) con las etiquetas exactas que usa y su RUC para reconocerla. La siguiente orden de esa agencia ya se identifica sola.
+4. **Si no cuadran**, la orden queda como `NEW_FORMAT_REVIEW` («Formato nuevo: revisar») con lo que se pudo leer. El asesor corrige en pantalla, vuelve a validar y pulsa «Guardar formato»: el motor ubica cada valor corregido en el documento, toma su etiqueta y guarda la plantilla (`POST /api/aprender`).
+
+El aprendizaje automático se apaga con `"aprendizajeAutomatico": false` en `config.json`.
+
+Medición, con formatos que el motor nunca vio (`_scripts/generar_formatos_nuevos.py` crea tres órdenes de agencias inventadas, con otro diseño y otras palabras, en PDF y escaneadas):
+
+| Prueba | Resultado |
+|---|---|
+| 3 agencias inventadas, PDF y escaneo (`_scripts/evaluar_formatos_nuevos.py`) | 164/164 datos (100 %) |
+| Las 14 órdenes reales leídas como si su formato no existiera (`_scripts/evaluar_generica.py`) | 671/671 datos (100 %) |
+| Segunda orden de la misma agencia con la plantilla aprendida de la primera | 287/287 datos, reconocida con 98 a 100 puntos |
+
+Las plantillas genéricas se armaron conociendo los 5 formatos reales, así que la prueba exigente es la de las agencias inventadas. El borrador manual sigue disponible:
 
 ```bash
-python -m motor calibrar nueva_orden.pdf --id ORDEN_AGENCIA_X   # volcado + borrador heurístico + prompt
-# (opcional, fuera de producción) afinar el borrador con un asistente usando el prompt
+python -m motor calibrar nueva_orden.pdf --id ORDEN_AGENCIA_X
 python -m motor probar cola_aprendizaje/nueva_orden.borrador.json nueva_orden.pdf --promover
 ```
 
-`probar` corre la plantilla en sandbox y solo la promueve a `plantillas/` si todas las validaciones de nivel ERROR se cumplen.
+## Revisión y corrección en pantalla
+
+En la ficha de cada orden, «Qué revisar» lista los errores con su fila. «Corregir datos» vuelve editables la cabecera, los totales, las filas y cada día de la pauta; «Validar de nuevo» recalcula todas las reglas (`POST /api/revalidar`). Cada corrección queda en `correcciones` con el valor leído y el final, y la lista muestra la orden como «corregida».
+
+## Salida para otros sistemas
+
+El JSON limpio (`motor/salida.py`) trae solo lo necesario:
+
+```json
+{
+  "documento": {"id": "DOC-20261016-153316BB", "archivo": "Orden_Nº_040176-2025-RADIO_OXIGENO-NIVEL_NACIONAL.PDF",
+                "estado": "COMPLETED", "estadoTexto": "Correcto", "plantilla": "ORDEN_FORMATO_DIVISION",
+                "formatoNuevo": false, "origen": "digital"},
+  "cabecera": {"numero_orden": "040176", "fecha_emision": "2025-04-03", "agencia": "HAVAS+ S.A.C.", "...": "..."},
+  "detalle": [{"item": 2, "horario": "06:00-23:59", "duracion": 20.0, "total_avisos": 104, "costo_unitario": 109.1,
+               "costo_total": 11346.4, "programacion": [{"fecha": "2025-04-07", "dia": 7, "avisos": 8}, "..."]}],
+  "totales": {"costo": 11346.4, "recargo": 0.0, "descuento": 0.0, "neto": 11346.4, "igv_pct": 0.18, "igv": 2042.35,
+              "total": 13388.75, "moneda": "PEN", "total_avisos": 114},
+  "validacion": {"ok": true, "errores": [], "observaciones": []}
+}
+```
+
+Si alguien corrigió algo, se agrega `"correcciones": [{"campo": "totals.total", "antes": …, "despues": …}]`.
+
+En la web: «Descargar JSON limpio» (una orden) y «JSON limpio (todas)». El JSON completo, con página, texto crudo y recuadro de cada dato, sigue disponible como «JSON completo (trazabilidad)».
+
+## API
+
+Documentación interactiva en `/docs`. Si `MOTOR_API_KEY` (o `config.json -> api.claves`) está definida, cada llamada a `/api/v1` lleva la cabecera `X-API-Key`.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| POST | `/api/v1/ordenes` | Sube un archivo (`archivo`) y devuelve el JSON limpio; `?formato=completo` para la trazabilidad, `?notificar=false` para no avisar |
+| POST | `/api/v1/ordenes/validar` | Recibe el JSON limpio corregido y lo devuelve con la validación y el estado recalculados |
+| GET | `/api/v1/plantillas` | Formatos que el motor reconoce (incluidos los aprendidos) |
+| GET | `/api/v1/salud` | Estado del servicio |
+
+```bash
+curl -H "X-API-Key: $MOTOR_API_KEY" -F "archivo=@orden.pdf" http://servidor:8765/api/v1/ordenes
+```
+
+## Errores y alertas
+
+Un archivo que no se puede leer vuelve con `estado: ERROR` y un código claro: `VACIO`, `MUY_GRANDE`, `FORMATO_NO_SOPORTADO`, `PDF_DANADO`, `PDF_PROTEGIDO`, `SIN_PAGINAS`, `DEMASIADAS_PAGINAS`, `IMAGEN_DANADA`, `SIN_TEXTO`.
+
+Las órdenes con error, que no cuadran o de formato nuevo por revisar disparan una alerta (`motor/notificar.py`) por webhook (JSON con un campo `text` que entienden Teams y Slack) y por correo SMTP. Se configura en `config.json -> notificaciones` o con variables de entorno (`MOTOR_WEBHOOK_URL`, `MOTOR_SMTP_SERVIDOR`, `MOTOR_SMTP_PUERTO`, `MOTOR_SMTP_USUARIO`, `MOTOR_SMTP_CLAVE`, `MOTOR_SMTP_DE`, `MOTOR_SMTP_PARA`). La clave del correo va solo en una variable de entorno. Cada envío queda en `salida/notificaciones.log`, y `POST /api/notificaciones/prueba` manda una alerta de prueba.
 
 ## Escaneados y fotos
 

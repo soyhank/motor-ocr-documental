@@ -1,0 +1,44 @@
+{
+ "agencia": "PUNTO MEDIOS PERU S.A.C.",
+ "agencia_ruc": "20544332211",
+ "anunciante": "FERRETERIA EL CONSTRUCTOR S.A.C.",
+ "anunciante_ruc": "20499887761",
+ "numero_orden": "7731",
+ "fecha_emision": "2025-06-30",
+ "medio": "RADIO OXIGENO",
+ "periodo_inicio": "2025-07-01",
+ "periodo_fin": "2025-07-14",
+ "neto": 4056.0,
+ "igv": 730.08,
+ "total": 4786.08,
+ "filas": [
+  {
+   "total_avisos": 24,
+   "costo_unitario": 120.0,
+   "costo_total": 2880.0,
+   "duracion": 15.0,
+   "horario": "06:00-12:00",
+   "dias": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "7": 4,
+    "8": 4
+   }
+  },
+  {
+   "total_avisos": 12,
+   "costo_unitario": 98.0,
+   "costo_total": 1176.0,
+   "duracion": 15.0,
+   "horario": "12:00-18:00",
+   "dias": {
+    "9": 3,
+    "10": 3,
+    "11": 3,
+    "14": 3
+   }
+  }
+ ]
+}

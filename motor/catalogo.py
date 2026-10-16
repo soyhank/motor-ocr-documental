@@ -43,11 +43,19 @@ def _catalogo() -> dict:
     return _cargar(mtime)
 
 
-def canonizar(campo: str, valor) -> str | None:
-    """Forma conocida para `valor` en el campo, o None si no hay una segura."""
+def canonizar(campo: str, valor, propios: list[str] | None = None) -> str | None:
+    """Forma conocida para `valor` en el campo, o None si no hay una segura. `propios` son
+    las formas que usa esa agencia (knownValues de su plantilla) y van primero."""
     if not isinstance(valor, str) or not valor.strip():
         return None
-    opciones = _catalogo().get(campo)
+    if propios:
+        r = _canon([(v, _clave(v)) for v in propios], valor)
+        if r is not None:
+            return r
+    return _canon(_catalogo().get(campo), valor)
+
+
+def _canon(opciones, valor: str) -> str | None:
     if not opciones:
         return None
     k = _clave(valor)

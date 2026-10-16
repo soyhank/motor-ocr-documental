@@ -214,15 +214,36 @@ def preprocesar(img: np.ndarray) -> dict:
     H, W = gris.shape
     horiz = cv2.morphologyEx(tinta, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (max(W // 25, 20), 1)))
     vert = cv2.morphologyEx(tinta, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(H // 60, 15))))
+    # los trazos verticales de letras grandes y en negrita (la N o la M de un membrete) también
+    # pasan el filtro: una línea de tabla es delgada para su alto o mucho más alta que el texto
+    alto_texto = _alto_texto(tinta)
+    n, etiquetas, stats, _ = cv2.connectedComponentsWithStats(vert)
+    es_regla = np.zeros(n, bool)
+    verticales = []
+    for i in range(1, n):
+        x, y, w, h, _ = stats[i]
+        if w <= max(5, 0.09 * h) or h >= 2.2 * alto_texto:
+            es_regla[i] = True
+            verticales.append(((x + w / 2) / W * 1000, y / H * 1000, (y + h) / H * 1000))
+    vert = np.where(es_regla[etiquetas], 255, 0).astype(np.uint8)
     reglas = cv2.dilate(cv2.bitwise_or(horiz, vert), np.ones((3, 3), np.uint8))
     para_ocr = plano.copy()
     para_ocr[reglas > 0] = 255
-    verticales = []
-    n, _, stats, _ = cv2.connectedComponentsWithStats(vert)
-    for i in range(1, n):
-        x, y, w, h, _ = stats[i]
-        verticales.append(((x + w / 2) / W * 1000, y / H * 1000, (y + h) / H * 1000))
     return {"gris": gris, "binaria": bw, "ocr": para_ocr, "verticales": verticales}
+
+
+def _alto_texto(tinta: np.ndarray) -> float:
+    """Alto típico de las letras (percentil 90 de los componentes con forma de carácter)."""
+    import cv2
+
+    n, _, st, _ = cv2.connectedComponentsWithStats(tinta)
+    if n < 3:
+        return 40.0
+    w, h = st[1:, 2], st[1:, 3]
+    letra = (h >= 8) & (h <= 150) & (w <= 3 * h) & (w >= 2)
+    if letra.sum() < 20:
+        return 40.0
+    return float(np.percentile(h[letra], 90))
 
 
 def _ordenar_esquinas(p: np.ndarray) -> np.ndarray:

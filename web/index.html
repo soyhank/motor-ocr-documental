@@ -31,7 +31,16 @@ main{padding:16px 20px;max-width:1500px;margin:0 auto}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;align-items:center}
 .chip{padding:6px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--panel);border:1px solid var(--line)}
 .s-COMPLETED{background:var(--ok-bg);color:var(--ok)} .s-COMPLETED_WITH_WARNINGS{background:var(--warn-bg);color:var(--warn)}
-.s-VALIDATION_FAILED,.s-ERROR{background:var(--bad-bg);color:var(--bad)} .s-TEMPLATE_NOT_IDENTIFIED{background:var(--new-bg);color:var(--new)}
+.s-VALIDATION_FAILED,.s-ERROR{background:var(--bad-bg);color:var(--bad)} .s-TEMPLATE_NOT_IDENTIFIED,.s-NEW_FORMAT_REVIEW{background:var(--new-bg);color:var(--new)}
+.aviso{padding:10px 12px;border-radius:10px;margin:0 0 12px;border:1px solid var(--line)}
+.aviso.nuevo{background:var(--new-bg);color:var(--ink);border-color:var(--new)} .aviso.mal{background:var(--bad-bg);border-color:var(--bad)}
+.aviso.bien{background:var(--ok-bg);border-color:var(--ok)}
+.aviso ul{margin:6px 0 0;padding-left:18px} .aviso li{margin:2px 0}
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+input.ed{font:inherit;width:100%;padding:4px 6px;border:1px solid var(--accent);border-radius:6px;background:var(--panel);color:var(--ink)}
+input.ed.num{text-align:right} .grid-dias input.ed{width:30px;padding:2px;text-align:center;font-size:11px}
+.editado{background:var(--warn-bg)!important} .editado input.ed{border-color:var(--warn)}
+a.link{color:var(--accent);cursor:pointer;text-decoration:underline}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 table{border-collapse:collapse;width:100%}
 th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
@@ -89,6 +98,8 @@ pre{font-size:11px;white-space:pre-wrap;word-break:break-all;margin:0}
   <input id="archivos" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.mp3,.wav,.m4a,.ogg" hidden>
   <button id="btnMuestras">Procesar muestras</button>
   <button id="btnExcel" disabled>Descargar Excel</button>
+  <button id="btnJsonTodo" disabled>JSON limpio (todas)</button>
+  <a class="btn" href="/docs" target="_blank" rel="noopener">API</a>
 </header>
 <main>
   <div class="nav"><button class="on" data-vista="ordenes">Órdenes</button><button data-vista="plantillas">Plantillas</button></div>
@@ -116,12 +127,13 @@ pre{font-size:11px;white-space:pre-wrap;word-break:break-all;margin:0}
   <section id="vPlantillas" hidden>
     <div class="card wrap" id="plantillas"></div>
     <p class="muted">Cada plantilla es un JSON en la carpeta <code>plantillas/</code>. Se recargan solas al guardar, sin reiniciar el servicio.
-    Si llega un formato nuevo, la orden aparece como «Formato nuevo» y desde su ficha se descarga un borrador de plantilla y el texto para calibrarla.</p>
+    Si llega un formato nuevo, el motor lo lee con sinónimos; si los totales cuadran, guarda solo la plantilla de esa agencia («aprendida»).
+    Si no cuadran, la orden queda como «Formato nuevo: revisar»: al corregirla en pantalla y pulsar «Guardar formato», el motor aprende de la corrección.</p>
   </section>
 </main>
 <script>
 const ESTADO = {COMPLETED:"Correcto", COMPLETED_WITH_WARNINGS:"Con observaciones", VALIDATION_FAILED:"No cuadra",
-  TEMPLATE_NOT_IDENTIFIED:"Formato nuevo", ERROR:"Error de lectura"};
+  NEW_FORMAT_REVIEW:"Formato nuevo: revisar", TEMPLATE_NOT_IDENTIFIED:"Formato nuevo", ERROR:"Error de lectura"};
 const ETIQ = {numero_orden:"N° de orden", revision:"Revisión", fecha_emision:"Fecha de emisión", division:"División",
   estado:"Estado", tipo_compra:"Tipo de compra", agencia:"Agencia", agencia_ruc:"RUC agencia", agencia_direccion:"Dirección agencia",
   agencia_telefono:"Teléfono agencia", anunciante:"Anunciante", anunciante_ruc:"RUC anunciante", anunciante_direccion:"Dirección anunciante",
@@ -144,7 +156,8 @@ const fmt = (v, k) => {
   if (typeof v === "number") return v.toLocaleString("es-PE", {minimumFractionDigits: Number.isInteger(v) && !/costo|neto|igv|total$/.test(k||"") ? 0 : 2, maximumFractionDigits: 4});
   return esc(v).replace(/\n/g, "<br>");
 };
-let lote = [], archivos = {}, actual = null, pagina = 1, tab = "datos", ocupado = false;
+let lote = [], archivos = {}, actual = null, pagina = 1, tab = "datos", ocupado = false, editando = false, jsonCompleto = false;
+const textoError = e => !e ? "" : typeof e === "string" ? e : (e.message || JSON.stringify(e));
 
 // ------------------------------------------------------------ procesamiento
 function sinImagenes(r){ return {...r, pages: (r.pages||[]).map(p => ({...p, image: undefined}))}; }
@@ -193,13 +206,13 @@ async function subir(files){
   for (const l of lotes){
     const fd = new FormData(); l.forEach(f => fd.append("archivos", f));
     try {
-      const r = await fetch("/api/procesar", {method:"POST", body: fd});
+      const r = await fetch("/api/procesar" + (subir.demo ? "?notificar=0" : ""), {method:"POST", body: fd});
       if (r.status === 413) throw new Error("archivo demasiado grande para subirlo de una vez (máximo 4,5 MB por envío)");
       if (!r.ok) throw new Error("HTTP " + r.status);
       const res = await r.json();
       res.forEach(x => { if (!x.documentId) x.documentId = "ERR-" + Math.random().toString(36).slice(2); lote.push(x); });
     } catch (e) {
-      l.forEach(f => lote.push({documentId: "ERR-" + Math.random().toString(36).slice(2), file: f.name, status: "ERROR", error: String(e)}));
+      l.forEach(f => lote.push({documentId: "ERR-" + Math.random().toString(36).slice(2), file: f.name, status: "ERROR", error: {code: "ENVIO", message: String(e.message || e)}}));
     }
     hecho += l.length; progreso(hecho, docs.length, `Procesando ${hecho} de ${docs.length}…${aviso}`); pintarLista();
   }
@@ -222,7 +235,7 @@ $("#btnMuestras").onclick = async () => {
   progreso(0, lista.length, "Descargando muestras…");
   const files = [];
   for (const m of lista){ const b = await (await fetch("/api/muestras/" + encodeURIComponent(m.name))).blob(); files.push(new File([b], m.name)); }
-  lote = []; archivos = {}; await subir(files);
+  lote = []; archivos = {}; subir.demo = true; await subir(files); subir.demo = false;
 };
 const drop = $("#drop");
 ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.add("on")}));
@@ -234,6 +247,7 @@ $("#btnExcel").onclick = async () => {
   if (!r.ok){ alert("No se pudo generar el Excel"); return; }
   descargar(await r.blob(), "ordenes_extraidas.xlsx");
 };
+$("#btnJsonTodo").onclick = () => descargar(new Blob([JSON.stringify(lote.map(d => d.salida).filter(Boolean), null, 2)], {type:"application/json"}), "ordenes.json");
 function descargar(blob, nombre){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
 
 // ------------------------------------------------------------ lista
@@ -243,6 +257,7 @@ function pintarLista(){
     Object.entries(cuenta).map(([s,n]) => `<span class="chip s-${s}">${n} ${ESTADO[s]||s}</span>`).join("") +
     (ocupado ? '<span class="muted"><span class="spin"></span> procesando…</span>' : "");
   $("#btnExcel").disabled = !lote.some(d => d.extractedData);
+  $("#btnJsonTodo").disabled = !lote.some(d => d.salida);
   if (!lote.length){ $("#lista").innerHTML = '<div class="empty">Sin documentos.</div>'; return; }
   $("#lista").innerHTML = `<table><thead><tr><th>Estado</th><th>Archivo</th><th>Orden</th><th>Agencia</th><th>Anunciante</th>
     <th>Medio</th><th class="num">Avisos</th><th class="num">Total</th><th>Plantilla</th><th class="num">ms</th></tr></thead><tbody>` +
@@ -250,7 +265,7 @@ function pintarLista(){
       ${rep.errors ? `<div class="muted">${rep.errors} error(es)</div>` : rep.warnings ? `<div class="muted">${rep.warnings} aviso(s)</div>` : ""}</td>
       <td>${esc(d.file)}</td><td>${esc(s.numero_orden)}</td><td>${esc(s.agencia)}</td><td>${esc(s.anunciante)}</td><td>${esc(s.medio)}</td>
       <td class="num">${fmt(s.avisos)}</td><td class="num">${s.total!=null ? (s.moneda==="USD"?"US$ ":"S/ ") + fmt(s.total,"total") : "—"}</td>
-      <td class="muted">${esc((d.template||{}).templateId||"—")}</td><td class="num muted">${(d.metrics||{}).ms??""}</td></tr>`; }).join("") + "</tbody></table>";
+      <td class="muted">${esc((d.template||{}).templateId||"—")}${(d.template||{}).learned ? ' <span class="badge s-NEW_FORMAT_REVIEW">aprendida</span>' : ""}${(d.corrections||[]).length ? ' <span class="badge s-COMPLETED_WITH_WARNINGS">corregida</span>' : ""}</td><td class="num muted">${(d.metrics||{}).ms??""}</td></tr>`; }).join("") + "</tbody></table>";
   document.querySelectorAll("#lista tr.click").forEach(tr => tr.onclick = () => abrir(tr.dataset.id));
   if (actual) document.querySelectorAll("#lista tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === actual.documentId));
 }
@@ -259,7 +274,7 @@ function pintarLista(){
 function abrir(id){
   actual = lote.find(d => d.documentId === id); if (!actual) return;
   document.querySelectorAll("#lista tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === id));
-  pagina = 1; $("#detalle").classList.add("on"); pintarVisor(); pintarPanel();
+  pagina = 1; editando = false; $("#detalle").classList.add("on"); pintarVisor(); pintarPanel();
   $("#detalle").scrollIntoView({behavior:"smooth", block:"start"});
 }
 function fuentes(){
@@ -276,7 +291,7 @@ function pintarVisor(){
     `<span class="muted">${pags[pagina-1] ? (pags[pagina-1].source==="ocr"?"escaneado (OCR)":"PDF digital") : ""}</span>`;
   document.querySelectorAll("#pager button[data-p]").forEach(b => b.onclick = () => {pagina = +b.dataset.p; pintarVisor();});
   const img = pags[pagina-1] && pags[pagina-1].image;
-  if (!img){ $("#visor").innerHTML = '<div class="empty">Sin vista previa' + (actual.error ? ": " + esc(actual.error) : "") + '</div>'; return; }
+  if (!img){ $("#visor").innerHTML = '<div class="empty">Sin vista previa' + (actual.error ? ": " + esc(textoError(actual.error)) : "") + '</div>'; return; }
   const cajas = fuentes().filter(f => f.s.page === pagina).map(f => {
     const b = f.s.bbox; return `<div class="bx" data-k="${f.k}" style="left:${b.x0/10}%;top:${b.y0/10}%;width:${(b.x1-b.x0)/10}%;height:${(b.y1-b.y0)/10}%"></div>`; }).join("");
   $("#visor").innerHTML = `<img src="${img}" alt="Página ${pagina}">` + cajas;
@@ -292,9 +307,107 @@ async function calibrar(tipo){
   if (!r.ok){ alert("No se pudo generar"); return; }
   descargar(await r.blob(), tipo === "prompt" ? "prompt_calibracion.md" : "plantilla_borrador.json");
 }
+// ------------------------------------------------------------ corrección manual
+function parsear(txt, k){
+  txt = String(txt).trim(); if (txt === "") return null;
+  if (/^(costo|neto|igv|total|recargo|descuento|costo_unitario|costo_total|duracion|total_avisos|igv_pct)$/.test(k)){
+    let t = txt.replace(/\s|S\/|US\$|\$/g, "");
+    if (/,\d{1,2}$/.test(t) && !/\.\d/.test(t)) t = t.replace(/\./g, "").replace(",", "."); else t = t.replace(/,/g, "");
+    const n = Number(t); if (isNaN(n)) return txt;
+    return k === "total_avisos" ? Math.round(n) : (k === "igv_pct" && n > 1 ? n / 100 : n);
+  }
+  return txt;
+}
+function anotar(campo, antes, despues){
+  actual.corrections = actual.corrections || [];
+  const prev = actual.corrections.find(c => c.campo === campo);
+  if (prev){ prev.despues = despues; if (JSON.stringify(prev.antes) === JSON.stringify(despues)) actual.corrections = actual.corrections.filter(c => c !== prev); }
+  else actual.corrections.push({campo, antes, despues});
+}
+const corregido = campo => (actual.corrections||[]).some(c => c.campo === campo);
+function editarCampo(sec, k, valor){
+  const d = actual.extractedData; d[sec] = d[sec] || {};
+  const antes = d[sec][k] ? d[sec][k].value : null; const v = parsear(valor, k);
+  if (!d[sec][k]) d[sec][k] = {value: v, tag: k.toUpperCase(), source: null}; else d[sec][k].value = v;
+  anotar(`${sec}.${k}`, antes, v);
+}
+function editarFila(i, k, valor){
+  const f = actual.extractedData.detail[i]; const antes = f[k] ? f[k].value : null; const v = parsear(valor, k);
+  if (!f[k]) f[k] = {value: v, tag: "DET_" + k.toUpperCase(), source: null}; else f[k].value = v;
+  anotar(`fila${i+1}.${k}`, antes, v);
+}
+function editarDia(i, dia, valor){
+  const f = actual.extractedData.detail[i]; f.programacion = f.programacion || [];
+  const e = f.programacion.find(x => x.dia === dia); const antes = e ? e.avisos : null;
+  const n = valor === "" ? 0 : Math.round(Number(valor)) || 0;
+  if (e){ if (n) e.avisos = n; else f.programacion = f.programacion.filter(x => x !== e); }
+  else if (n) { f.programacion.push({dia, fecha: null, letra: null, avisos: n, source: null}); f.programacion.sort((a,b) => a.dia - b.dia); }
+  anotar(`fila${i+1}.d${dia}`, antes, n || null);
+}
+async function revalidar(){
+  const b = $("#bValidar"); if (b){ b.disabled = true; b.innerHTML = '<span class="spin"></span> validando…'; }
+  try {
+    const r = await fetch("/api/revalidar", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({result: sinImagenes(actual), corrections: actual.corrections || []})});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const u = await r.json(); Object.assign(actual, u);
+  } catch (e) { alert("No se pudo validar: " + e.message); }
+  editando = false; pintarLista(); pintarVisor(); pintarPanel();
+}
+async function guardarFormato(){
+  const f = archivos[actual.file]; if (!f){ alert("Vuelve a subir el archivo para guardar el formato."); return; }
+  const b = $("#bAprender"); b.disabled = true; b.innerHTML = '<span class="spin"></span> guardando…';
+  const fd = new FormData(); fd.append("archivo", f);
+  fd.append("resultado", JSON.stringify({extractedData: actual.extractedData, corrections: actual.corrections || []}));
+  try {
+    const r = await fetch("/api/aprender", {method:"POST", body: fd});
+    if (!r.ok) throw new Error((await r.json()).detail || ("HTTP " + r.status));
+    const t = await r.json();
+    actual.template = {...actual.template, templateId: t.templateId, version: t.version, learned: true, savedAs: t.savedAs};
+    alert(`Formato guardado como ${t.templateId} (v${t.version}). La próxima orden de esta agencia se leerá sola.`);
+  } catch (e) { alert("No se pudo guardar el formato: " + e.message); }
+  pintarLista(); pintarPanel();
+}
+function avisos(){
+  const rep = actual.validationReport || {}; const fall = (rep.executedRules||[]).filter(r => r.passed === false);
+  const err = fall.filter(r => r.severity === "ERROR"), obs = fall.filter(r => r.severity !== "ERROR");
+  const t = actual.template || {}; let h = "";
+  if (actual.newFormat && t.learned) h += `<div class="aviso nuevo"><strong>Formato nuevo aprendido.</strong> El motor no conocía este formato, lo leyó por sinónimos, los totales cuadraron y guardó la plantilla <code>${esc(t.templateId)}</code>. La próxima orden de esta agencia se reconoce sola.</div>`;
+  else if (actual.newFormat) h += `<div class="aviso nuevo"><strong>Formato nuevo.</strong> Ninguna plantilla lo reconoce y la lectura automática no cuadra todavía. Corrige los datos marcados, pulsa «Validar de nuevo» y, cuando cuadre, «Guardar formato»: el motor aprende esta agencia con tu corrección.
+    <div class="barra" style="margin:8px 0 0"><button id="bAprender" class="primary" ${rep.isValid ? "" : "disabled title='Primero corrige hasta que cuadre'"}>Guardar formato</button></div></div>`;
+  if (err.length) h += `<div class="aviso mal"><strong>Qué revisar (${err.length})</strong><ul>` + err.slice(0, 12).map(r =>
+      `<li>${esc(r.description || r.rule)}${r.row ? ` · <a class="link" data-fila="${r.row}">fila ${r.row}</a>` : ""}${r.detail ? `: ${esc(r.detail)}` : r.difference != null ? `: ${r.left} frente a ${r.right}` : ""}</li>`).join("") + "</ul></div>";
+  else if (rep.isValid && (actual.corrections||[]).length) h += `<div class="aviso bien">Con las correcciones, la orden cuadra.</div>`;
+  if (obs.length) h += `<div class="aviso"><strong>Observaciones (${obs.length})</strong><ul>` + obs.slice(0, 8).map(r => `<li>${esc(r.description || r.rule)}${r.detail ? `: ${esc(r.detail)}` : ""}</li>`).join("") + "</ul></div>";
+  return h;
+}
+function barra(){
+  const n = (actual.corrections||[]).length;
+  return `<div class="barra">${editando ? `<button id="bValidar" class="primary">Validar de nuevo</button><button id="bCancelar">Terminar edición</button>`
+    : `<button id="bEditar">Corregir datos</button>${n ? `<button id="bValidar" class="primary">Validar de nuevo</button>` : ""}`}
+    <span class="muted" id="nCorr">${n ? `${n} corrección(es)` : ""}</span></div>`;
+}
+function enlazarBarra(p){
+  const b1 = p.querySelector("#bEditar"); if (b1) b1.onclick = () => { editando = true; pintarPanel(); };
+  const b2 = p.querySelector("#bCancelar"); if (b2) b2.onclick = () => { editando = false; pintarPanel(); };
+  const b3 = p.querySelector("#bValidar"); if (b3) b3.onclick = revalidar;
+  const b4 = p.querySelector("#bAprender"); if (b4) b4.onclick = guardarFormato;
+  p.querySelectorAll("a[data-fila]").forEach(a => a.onclick = () => { tab = "pauta"; document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x.dataset.t === "pauta")); pintarPanel();
+    const tr = document.querySelector(`#panel tr[data-fila="${a.dataset.fila}"]`); if (tr){ tr.scrollIntoView({block:"center"}); tr.classList.add("sel"); } });
+  p.querySelectorAll("input.ed[data-sec]").forEach(el => el.onchange = () => { editarCampo(el.dataset.sec, el.dataset.k, el.value); el.parentElement.classList.add("editado"); pintarBarraSola(); });
+  p.querySelectorAll("input.ed[data-fila]").forEach(el => el.onchange = () => { editarFila(+el.dataset.fila, el.dataset.k, el.value); el.parentElement.classList.add("editado"); pintarBarraSola(); });
+  p.querySelectorAll("input.ed[data-dia]").forEach(el => el.onchange = () => { editarDia(+el.dataset.i, +el.dataset.dia, el.value); el.parentElement.classList.add("editado"); pintarBarraSola(); });
+}
+// solo se actualiza el contador: redibujar la barra en el 'change' (que llega al hacer clic en
+// otro botón) dejaría el clic sobre un botón que ya no existe
+function pintarBarraSola(){ const n = (actual.corrections||[]).length; const e = $("#nCorr"); if (e) e.textContent = n ? `${n} corrección(es)` : ""; }
+const NUEVOS = ["numero_orden","fecha_emision","agencia","agencia_ruc","anunciante","anunciante_ruc","medio","producto","campana","periodo_inicio","periodo_fin","moneda"];
+const NUEVOS_TOT = ["costo","descuento","neto","igv","total","total_avisos"];
+
 function pintarPanel(){
   const p = $("#panel"); const d = actual.extractedData || {}; const rep = actual.validationReport;
-  if (actual.status === "ERROR"){ p.innerHTML = `<p>No se pudo leer el archivo.</p><pre>${esc(actual.error)}</pre>`; return; }
+  if (actual.status === "ERROR"){ const e = actual.error || {};
+    p.innerHTML = `<div class="aviso mal"><strong>No se pudo leer el archivo.</strong><div>${esc(textoError(e))}</div>${e.code ? `<code>${esc(e.code)}</code>` : ""}</div>`; return; }
   if (actual.status === "TEMPLATE_NOT_IDENTIFIED"){
     const c = (actual.template && actual.template.candidates && actual.template.candidates[0]) || {};
     p.innerHTML = `<p>No hay una plantilla que reconozca este formato (mejor puntaje: ${esc(c.templateId)} con ${c.score ?? 0} de ${c.threshold ?? 80}).</p>
@@ -306,32 +419,45 @@ function pintarPanel(){
     return;
   }
   if (tab === "datos"){
-    const bloque = (sec, titulo) => { const e = Object.entries(d[sec]||{}); if (!e.length) return "";
-      return `<h3>${titulo}</h3><dl>` + e.map(([k,v]) => `<dt class="campo" data-k="${sec}.${k}">${ETIQ[k]||k}</dt><dd class="campo" data-k="${sec}.${k}">${fmt(v?.value,k)}</dd>`).join("") + "</dl>"; };
-    p.innerHTML = `<p><span class="badge s-${actual.status}">${ESTADO[actual.status]}</span>
-      <span class="muted">· plantilla ${esc(actual.template.templateId)} v${actual.template.version} · puntaje ${actual.template.score}</span></p>` +
-      bloque("header","Cabecera") + bloque("totals","Totales") +
-      `<p style="margin-top:14px"><button id="bJson">Descargar JSON</button></p>`;
-    $("#bJson").onclick = () => descargar(new Blob([JSON.stringify(sinImagenes(actual), null, 2)], {type:"application/json"}), actual.file.replace(/\.[^.]+$/, "") + ".json");
+    const bloque = (sec, titulo, extra) => {
+      const claves = Object.keys(d[sec]||{}); if (editando) (extra||[]).forEach(k => { if (!claves.includes(k)) claves.push(k); });
+      if (!claves.length) return "";
+      return `<h3>${titulo}</h3><dl>` + claves.map(k => { const v = (d[sec]||{})[k]; const c = `${sec}.${k}`;
+        const val = editando ? `<input class="ed" data-sec="${sec}" data-k="${k}" value="${esc(v && v.value != null ? v.value : "")}">` : fmt(v?.value,k);
+        return `<dt class="campo" data-k="${c}">${ETIQ[k]||k}</dt><dd class="campo ${corregido(c)?"editado":""}" data-k="${c}">${val}</dd>`; }).join("") + "</dl>"; };
+    const t = actual.template || {};
+    p.innerHTML = `<p><span class="badge s-${actual.status}">${ESTADO[actual.status]||actual.status}</span>
+      <span class="muted">· plantilla ${esc(t.templateId)}${t.version ? " v" + t.version : ""}${t.score != null ? " · puntaje " + t.score : ""}</span></p>` +
+      avisos() + barra() + bloque("header","Cabecera", NUEVOS) + bloque("totals","Totales", NUEVOS_TOT) +
+      `<p style="margin-top:14px"><button id="bJson">Descargar JSON limpio</button> <button id="bJsonC">JSON completo (trazabilidad)</button></p>`;
+    const base = actual.file.replace(/\.[^.]+$/, "");
+    $("#bJson").onclick = () => descargar(new Blob([JSON.stringify(actual.salida, null, 2)], {type:"application/json"}), base + ".json");
+    $("#bJsonC").onclick = () => descargar(new Blob([JSON.stringify(sinImagenes(actual), null, 2)], {type:"application/json"}), base + ".completo.json");
   } else if (tab === "pauta"){
     const filas = d.detail || []; const dias = new Set(); filas.forEach(f => (f.programacion||[]).forEach(x => dias.add(x.dia)));
     const maxDia = Math.max(28, ...dias); const letras = {};
     filas.forEach(f => (f.programacion||[]).forEach(x => letras[x.dia] = x.letra));
     const v = (f,k) => f[k]?.value;
-    p.innerHTML = `<h3>Filas de la orden</h3><div class="wrap"><table><thead><tr><th>#</th><th>Descripción</th><th>Horario</th><th class="num">Dur.</th>
+    const celda = (f,i,k,tipo) => { const c = `fila${i+1}.${k}`; const cls = (tipo==="num"?"num ":"") + (corregido(c)?"editado":"");
+      return editando ? `<td class="${cls}"><input class="ed ${tipo==="num"?"num":""}" data-fila="${i}" data-k="${k}" value="${esc(v(f,k) ?? "")}"></td>`
+        : `<td class="${cls}">${fmt(v(f,k), /costo/.test(k) ? "costo" : k)}</td>`; };
+    p.innerHTML = avisos() + barra() + `<h3>Filas de la orden</h3><div class="wrap"><table><thead><tr><th>#</th><th>Descripción</th><th>Horario</th><th class="num">Dur.</th>
       <th class="num">Avisos</th><th class="num">C. unit.</th><th class="num">C. total</th></tr></thead><tbody>` +
-      filas.map((f,i) => `<tr class="campo" data-k="fila${i}.descripcion"><td>${i+1}</td><td>${fmt(v(f,"descripcion"))}
+      filas.map((f,i) => `<tr class="campo" data-k="fila${i}.descripcion" data-fila="${i+1}"><td>${i+1}</td><td>${fmt(v(f,"descripcion"))}
         ${v(f,"seccion")?`<div class="muted">${esc(v(f,"seccion"))}</div>`:""}${v(f,"paquete")?`<div class="muted">Paquete: ${esc(v(f,"paquete"))}</div>`:""}
         ${v(f,"bonificado")?'<span class="badge s-COMPLETED_WITH_WARNINGS">bonificado</span>':""}${v(f,"es_paquete")?'<span class="badge s-TEMPLATE_NOT_IDENTIFIED">paquete</span>':""}</td>
-        <td>${fmt(v(f,"horario"))}</td><td class="num">${fmt(v(f,"duracion"))}</td><td class="num">${fmt(v(f,"total_avisos"))}</td>
-        <td class="num">${fmt(v(f,"costo_unitario"),"costo")}</td><td class="num">${fmt(v(f,"costo_total"),"costo")}</td></tr>`).join("") +
+        ${celda(f,i,"horario")}${celda(f,i,"duracion","num")}${celda(f,i,"total_avisos","num")}
+        ${celda(f,i,"costo_unitario","num")}${celda(f,i,"costo_total","num")}</tr>`).join("") +
       `</tbody></table></div><h3>Avisos por día ${actual.calendar ? `(${String(actual.calendar.month).padStart(2,"0")}/${actual.calendar.year})` : ""}</h3>
       <div class="wrap"><table class="grid-dias"><thead><tr><th>#</th>${[...Array(maxDia)].map((_,i)=>`<th>${letras[i+1]||""}<br>${i+1}</th>`).join("")}</tr></thead><tbody>` +
       filas.map((f,i) => { const m = {}; (f.programacion||[]).forEach(x => m[x.dia] = x.avisos);
-        return `<tr><td>${i+1}</td>${[...Array(maxDia)].map((_,j)=>`<td class="${m[j+1]?"v campo":""}" data-k="fila${i}.d${j+1}">${m[j+1]||""}</td>`).join("")}</tr>`; }).join("") +
+        return `<tr><td>${i+1}</td>${[...Array(maxDia)].map((_,j)=> { const c = `fila${i+1}.d${j+1}`, ed = corregido(c) ? " editado" : "";
+          return editando ? `<td class="${ed}"><input class="ed" data-i="${i}" data-dia="${j+1}" value="${m[j+1]||""}"></td>`
+            : `<td class="${m[j+1]?"v campo":""}${ed}" data-k="fila${i}.d${j+1}">${m[j+1]||""}</td>`; }).join("")}</tr>`; }).join("") +
       "</tbody></table></div>" +
       ((actual.materials||[]).length ? `<h3>Material de audio</h3>` + actual.materials.map(m => `<div>${esc(m.file)}: ${m.seconds != null ? m.seconds.toFixed(1) : "?"} s · fila ${m.row} ${m.match?"✓ coincide":"✗ no coincide"}</div>`).join("") : "");
   } else if (tab === "val"){
+    if (!rep){ p.innerHTML = '<p class="muted">Sin validaciones.</p>'; return; }
     const ic = r => r.status==="PASSED" ? '<span class="ic p">✓</span>' : r.status==="SKIPPED" ? '<span class="ic s">–</span>' :
       r.severity==="ERROR" ? '<span class="ic f">✗</span>' : '<span class="ic w">!</span>';
     const orden = r => r.status==="FAILED" ? (r.severity==="ERROR"?0:1) : r.status==="PASSED" ? 2 : 3;
@@ -340,8 +466,11 @@ function pintarPanel(){
         ${r.detail?`<div>${esc(r.detail)}</div>`:""}${r.status==="FAILED"&&r.difference!=null&&!r.detail?`<div>Diferencia: ${r.difference} (${r.left} vs ${r.right})</div>`:""}
         <code>${esc(r.rule)}</code></div></div>`).join("");
   } else {
-    p.innerHTML = `<pre>${esc(JSON.stringify(sinImagenes(actual), null, 2))}</pre>`;
+    p.innerHTML = `<div class="barra"><button id="bJs1" class="${jsonCompleto?"":"primary"}">Limpio (para otro sistema)</button><button id="bJs2" class="${jsonCompleto?"primary":""}">Completo (con trazabilidad)</button></div>
+      <pre>${esc(JSON.stringify(jsonCompleto ? sinImagenes(actual) : actual.salida, null, 2))}</pre>`;
+    $("#bJs1").onclick = () => { jsonCompleto = false; pintarPanel(); }; $("#bJs2").onclick = () => { jsonCompleto = true; pintarPanel(); };
   }
+  enlazarBarra(p);
   p.querySelectorAll(".campo[data-k]").forEach(el => { el.onmouseenter = () => resaltar(el.dataset.k, true); el.onmouseleave = () => resaltar(el.dataset.k, false); });
 }
 
@@ -351,7 +480,7 @@ document.querySelectorAll(".nav button").forEach(b => b.onclick = async () => {
   if (b.dataset.vista === "plantillas"){
     const ps = await (await fetch("/api/plantillas")).json();
     $("#plantillas").innerHTML = `<table><thead><tr><th>Plantilla</th><th>Versión</th><th>Formato que reconoce</th><th class="num">Campos</th><th class="num">Columnas</th><th>Archivo</th></tr></thead><tbody>` +
-      ps.map(t => `<tr><td><strong>${esc(t.templateId)}</strong></td><td>v${t.version}</td><td>${esc(t.description)}</td><td class="num">${t.campos}</td><td class="num">${t.columnas}</td><td class="muted">${esc(t.archivo)}</td></tr>`).join("") + "</tbody></table>";
+      ps.map(t => `<tr><td><strong>${esc(t.templateId)}</strong>${t.aprendida ? ` <span class="badge s-NEW_FORMAT_REVIEW">aprendida</span><div class="muted">de ${esc(t.aprendidaDe||"")}</div>` : ""}</td><td>v${t.version}</td><td>${esc(t.description)}</td><td class="num">${t.campos}</td><td class="num">${t.columnas}</td><td class="muted">${esc(t.archivo)}</td></tr>`).join("") + "</tbody></table>";
   }
 });
 </script>

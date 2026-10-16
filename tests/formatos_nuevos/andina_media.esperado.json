@@ -1,0 +1,59 @@
+{
+ "agencia": "ANDINA MEDIA S.A.C.",
+ "agencia_ruc": "20612345679",
+ "anunciante": "DISTRIBUIDORA LIMA NORTE S.A.C.",
+ "numero_orden": "AM-2025-0457",
+ "fecha_emision": "2025-05-14",
+ "medio": "RPP NOTICIAS",
+ "periodo_inicio": "2025-06-01",
+ "periodo_fin": "2025-06-30",
+ "neto": 6450.0,
+ "igv": 1161.0,
+ "total": 7611.0,
+ "filas": [
+  {
+   "total_avisos": 20,
+   "costo_unitario": 210.0,
+   "costo_total": 4200.0,
+   "duracion": 20.0,
+   "horario": "06:00-09:00",
+   "dias": {
+    "2": 2,
+    "3": 2,
+    "4": 2,
+    "5": 2,
+    "6": 2,
+    "9": 2,
+    "10": 2,
+    "11": 2,
+    "12": 2,
+    "13": 2
+   }
+  },
+  {
+   "total_avisos": 15,
+   "costo_unitario": 150.0,
+   "costo_total": 2250.0,
+   "duracion": 20.0,
+   "horario": "14:00-18:00",
+   "dias": {
+    "16": 3,
+    "17": 3,
+    "18": 3,
+    "19": 3,
+    "20": 3
+   }
+  },
+  {
+   "total_avisos": 4,
+   "costo_unitario": 0.0,
+   "costo_total": 0.0,
+   "duracion": 20.0,
+   "horario": "19:00-22:00",
+   "dias": {
+    "21": 2,
+    "22": 2
+   }
+  }
+ ]
+}

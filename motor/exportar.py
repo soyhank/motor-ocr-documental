@@ -13,11 +13,12 @@ ESTADOS = {
     "COMPLETED": "Correcto",
     "COMPLETED_WITH_WARNINGS": "Con observaciones",
     "VALIDATION_FAILED": "No cuadra",
+    "NEW_FORMAT_REVIEW": "Formato nuevo: revisar",
     "TEMPLATE_NOT_IDENTIFIED": "Formato nuevo",
     "ERROR": "Error de lectura",
 }
 COLOR_ESTADO = {"COMPLETED": "D9EAD3", "COMPLETED_WITH_WARNINGS": "FFF2CC", "VALIDATION_FAILED": "F4CCCC",
-                "TEMPLATE_NOT_IDENTIFIED": "D9D2E9", "ERROR": "F4CCCC"}
+                "TEMPLATE_NOT_IDENTIFIED": "D9D2E9", "NEW_FORMAT_REVIEW": "D9D2E9", "ERROR": "F4CCCC"}
 
 COLUMNAS_ORDEN = [
     ("Archivo", "file"), ("Estado", "estado"), ("Plantilla", "plantilla"), ("N° orden", "numero_orden"),

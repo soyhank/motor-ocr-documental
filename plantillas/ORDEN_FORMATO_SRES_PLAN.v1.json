@@ -172,7 +172,12 @@
           "searchDirection": "RIGHT",
           "maxDistance": 250
         },
-        "required": true
+        "required": true,
+        "knownValues": [
+          "RPP_NOTICIAS",
+          "RADIO RPP OMNET MD",
+          "RADIO OXIGENO OMNET MD"
+        ]
       },
       {
         "name": "moneda",

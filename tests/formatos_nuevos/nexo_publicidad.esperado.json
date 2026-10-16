@@ -1,0 +1,36 @@
+{
+ "agencia": "NEXO PUBLICIDAD E.I.R.L.",
+ "agencia_ruc": "20609876540",
+ "anunciante": "CLINICA SANTA ROSA S.A.",
+ "numero_orden": "1288",
+ "fecha_emision": "2025-06-02",
+ "medio": "RADIO CAPITAL",
+ "periodo_inicio": "2025-06-05",
+ "periodo_fin": "2025-06-20",
+ "neto": 8380.0,
+ "igv": 1508.4,
+ "total": 9888.4,
+ "filas": [
+  {
+   "total_avisos": 12,
+   "costo_unitario": 380.0,
+   "costo_total": 4560.0,
+   "duracion": 30.0,
+   "horario": "07:00-08:00"
+  },
+  {
+   "total_avisos": 40,
+   "costo_unitario": 95.5,
+   "costo_total": 3820.0,
+   "duracion": 20.0,
+   "horario": "06:00-22:00"
+  },
+  {
+   "total_avisos": 8,
+   "costo_unitario": 0.0,
+   "costo_total": 0.0,
+   "duracion": 20.0,
+   "horario": "06:00-22:00"
+  }
+ ]
+}

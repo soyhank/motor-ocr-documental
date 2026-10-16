@@ -46,6 +46,9 @@ class Repositorio:
             self._firma = firma
         return list(self._plantillas.values())
 
+    def recargar(self):
+        self._firma = None
+
     def obtener(self, template_id: str) -> dict | None:
         self.todas()
         return self._plantillas.get(template_id)

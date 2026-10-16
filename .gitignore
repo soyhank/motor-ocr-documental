@@ -7,3 +7,4 @@ tests/escaneos/*.png
 tests/escaneos/*.jpg
 
 .vercel
+tests/formatos_nuevos/*.png

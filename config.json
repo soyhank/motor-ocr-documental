@@ -2,7 +2,33 @@
   "empresaReceptora": {
     "nombre": "Grupo RPP S.A.C.",
     "ruc": "20492353214",
-    "rucs": ["20492353214"],
-    "alias": ["GRUPORPP", "GRUPORPPSAC", "RPP"]
+    "rucs": [
+      "20492353214"
+    ],
+    "alias": [
+      "GRUPORPP",
+      "GRUPORPPSAC",
+      "RPP"
+    ]
+  },
+  "aprendizajeAutomatico": true,
+  "notificaciones": {
+    "eventos": [
+      "ERROR",
+      "VALIDATION_FAILED",
+      "NEW_FORMAT_REVIEW"
+    ],
+    "webhook": "",
+    "correo": {
+      "servidor": "",
+      "puerto": 587,
+      "usuario": "",
+      "clave_env": "MOTOR_SMTP_CLAVE",
+      "de": "",
+      "para": []
+    }
+  },
+  "api": {
+    "claves": []
   }
 }

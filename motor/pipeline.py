@@ -41,7 +41,7 @@ def _expandir_periodos(campos: dict, plantilla_campos: list[dict]):
         per = v["value"] or {}
         for parte, clave in (("inicio", "inicio"), ("fin", "fin")):
             campos[f"{base}_{parte}"] = {"value": per.get(clave), "tag": f"{v['tag']}_{parte.upper()}",
-                                         "source": v.get("source")}
+                                         "source": v.get("source"), "_ancla": v.get("_ancla")}
 
 
 def _calendario(header: dict, plantilla: dict) -> tuple[int, int] | None:
@@ -90,6 +90,9 @@ def _resumen(datos: dict) -> dict:
 
 
 def extraer_con_plantilla(doc: Documento, plantilla: dict) -> dict:
+    if plantilla.get("origin") == "auto":  # plantilla aprendida: misma lógica que la genérica
+        from .generica import extraer_auto
+        return extraer_auto(doc, plantilla, cargar_config())
     opciones = plantilla.get("options", {})
     lineas = [l for p in doc.paginas for l in agrupar_lineas(p.tokens)]
     campos_h = plantilla.get("header", {}).get("fields", [])
@@ -124,9 +127,18 @@ def procesar(ruta: str | Path, datos_bytes: bytes | None = None, con_imagen: boo
     t0 = time.perf_counter()
     ruta = Path(ruta)
     try:
+        if datos_bytes is None:
+            datos_bytes = ruta.read_bytes()
+        _revisar_archivo(ruta, datos_bytes)
         doc = ingerir(ruta, datos_bytes, con_imagen=con_imagen)
+        if not doc.paginas or not any(p.tokens for p in doc.paginas):
+            raise ErrorArchivo("SIN_TEXTO", "No se encontró texto en el documento (página en blanco o imagen ilegible)")
+    except ErrorArchivo as e:
+        return {"documentId": None, "file": ruta.name, "status": "ERROR",
+                "error": {"code": e.codigo, "message": e.mensaje}}
     except Exception as e:  # noqa: BLE001
-        return {"documentId": None, "file": ruta.name, "status": "ERROR", "error": str(e)}
+        return {"documentId": None, "file": ruta.name, "status": "ERROR",
+                "error": {"code": "LECTURA", "message": f"No se pudo leer el archivo: {e}"}}
     res = {
         "documentId": _id_documento(doc.sha256),
         "file": doc.nombre,
@@ -147,14 +159,7 @@ def procesar(ruta: str | Path, datos_bytes: bytes | None = None, con_imagen: boo
         "candidates": [{k: c[k] for k in ("templateId", "score", "threshold")} for c in ident["candidates"][:5]],
     }
     if plantilla is None:
-        res["status"] = "TEMPLATE_NOT_IDENTIFIED"
-        try:
-            res["learningQueue"] = encolar_aprendizaje(doc)
-        except OSError:  # sistema de archivos de solo lectura (despliegue en la nube)
-            res["learningQueue"] = None
-        res["metrics"] = {"ms": round((time.perf_counter() - t0) * 1000)}
-        res["_doc"] = doc
-        return res
+        return _formato_nuevo(doc, res, t0)
 
     datos = extraer_con_plantilla(doc, plantilla)
     reporte = validar(datos, plantilla, cargar_config())
@@ -166,6 +171,81 @@ def procesar(ruta: str | Path, datos_bytes: bytes | None = None, con_imagen: boo
     res["status"] = _estado(reporte)
     res["metrics"] = {"ms": round((time.perf_counter() - t0) * 1000)}
     res["_doc"] = doc
+    return res
+
+
+class ErrorArchivo(Exception):
+    def __init__(self, codigo: str, mensaje: str):
+        super().__init__(mensaje)
+        self.codigo, self.mensaje = codigo, mensaje
+
+
+MAX_PAGINAS = 30
+MAX_BYTES = 40 * 1024 * 1024
+
+
+def _revisar_archivo(ruta: Path, datos: bytes):
+    """Errores de archivo con un código y un mensaje claro para el usuario."""
+    ext = ruta.suffix.lower()
+    if not datos:
+        raise ErrorArchivo("VACIO", "El archivo está vacío")
+    if len(datos) > MAX_BYTES:
+        raise ErrorArchivo("MUY_GRANDE", f"El archivo pesa {len(datos) / 1e6:.0f} MB; el máximo es {MAX_BYTES // 1_000_000} MB")
+    if ext != ".pdf" and ext not in EXT_IMAGEN:
+        raise ErrorArchivo("FORMATO_NO_SOPORTADO", f"Formato {ext or 'sin extensión'} no soportado: se aceptan PDF, JPG, PNG y TIFF")
+    if ext == ".pdf":
+        if not datos.lstrip()[:5].startswith(b"%PDF"):
+            raise ErrorArchivo("PDF_DANADO", "El archivo no es un PDF válido (puede estar dañado o tener otra extensión)")
+        import fitz
+        try:
+            d = fitz.open(stream=datos, filetype="pdf")
+        except Exception:  # noqa: BLE001
+            raise ErrorArchivo("PDF_DANADO", "El PDF está dañado y no se puede abrir") from None
+        if d.needs_pass:
+            raise ErrorArchivo("PDF_PROTEGIDO", "El PDF está protegido con contraseña; envíe una copia sin clave")
+        if d.page_count == 0:
+            raise ErrorArchivo("SIN_PAGINAS", "El PDF no tiene páginas")
+        if d.page_count > MAX_PAGINAS:
+            raise ErrorArchivo("DEMASIADAS_PAGINAS", f"El PDF tiene {d.page_count} páginas; el máximo es {MAX_PAGINAS}")
+    else:
+        import cv2
+        import numpy as np
+        if ext not in {".tif", ".tiff"} and cv2.imdecode(np.frombuffer(datos, np.uint8), cv2.IMREAD_GRAYSCALE) is None:
+            raise ErrorArchivo("IMAGEN_DANADA", "La imagen está dañada o no se puede abrir")
+
+
+def _formato_nuevo(doc: Documento, res: dict, t0: float) -> dict:
+    """Ninguna plantilla llegó al umbral: lectura genérica y, si cuadra, plantilla aprendida."""
+    from .generica import guardar_plantilla, leer_generico, plantilla_aprendida
+
+    config = cargar_config()
+    plantilla, datos, reporte = leer_generico(doc, config)
+    res["documentType"] = plantilla.get("documentType")
+    res["extractedData"] = _limpiar({k: v for k, v in datos.items() if not k.startswith("_")})
+    res["calendar"] = {"year": datos["_calendario"][0], "month": datos["_calendario"][1]} if datos["_calendario"] else None
+    res["summary"] = _resumen(res["extractedData"])
+    res["validationReport"] = reporte
+    res["newFormat"] = True
+    aprender = config.get("aprendizajeAutomatico", True)
+    if reporte["isValid"] and res["summary"].get("filas") and aprender:
+        nueva = plantilla_aprendida(doc, plantilla, datos)
+        guardada = guardar_plantilla(nueva)
+        if guardada:
+            repo().recargar()
+        res["template"] = {**res["template"], "templateId": nueva["templateId"], "version": nueva.get("version", 1),
+                           "learned": True, "savedAs": guardada}
+        res["status"] = _estado(reporte)
+    else:
+        res["template"] = {**res["template"], "templateId": plantilla["templateId"], "learned": False}
+        res["status"] = "NEW_FORMAT_REVIEW"
+        try:
+            res["learningQueue"] = encolar_aprendizaje(doc)
+        except OSError:  # sistema de archivos de solo lectura (despliegue en la nube)
+            res["learningQueue"] = None
+    res["metrics"] = {"ms": round((time.perf_counter() - t0) * 1000)}
+    res["_doc"] = doc
+    res["_plantilla"] = plantilla
+    res["_datos"] = datos
     return res
 
 
