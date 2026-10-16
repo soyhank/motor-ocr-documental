@@ -1,7 +1,7 @@
 @echo off
 rem Abre el motor a internet desde esta PC con un tunel temporal de Cloudflare (gratis, sin cuenta).
-rem   PUBLICAR.bat              -> contrasena aleatoria
-rem   PUBLICAR.bat MiClave123   -> esa contrasena
+rem   PUBLICAR.bat              -> acceso libre, sin contrasena
+rem   PUBLICAR.bat MiClave123   -> pide esa contrasena (usuario cualquiera); la API usa X-API-Key: MiClave123
 rem La direccion https://....trycloudflare.com aparece abajo, en las lineas de cloudflared.
 rem Funciona mientras esta ventana y la PC esten encendidas; al cerrarla, la direccion deja de existir.
 chcp 65001 >nul
@@ -16,18 +16,17 @@ if not exist herramientas\cloudflared.exe (
   curl -L -o herramientas\cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
 )
 
-if "%~1"=="" (
-  for /f %%c in ('powershell -NoProfile -Command "-join ((48..57)+(97..122) | Get-Random -Count 10 | ForEach-Object {[char]$_})"') do set "MOTOR_CLAVE_WEB=%%c"
-) else (
-  set "MOTOR_CLAVE_WEB=%~1"
-)
-set "MOTOR_API_KEY=%MOTOR_CLAVE_WEB%"
-
+set "MOTOR_CLAVE_WEB="
+set "MOTOR_API_KEY="
 echo.
 echo ============================================================
-echo  Contrasena para entrar: %MOTOR_CLAVE_WEB%
-echo  (el navegador pide usuario y contrasena: usuario cualquiera)
-echo  Para la API: cabecera X-API-Key: %MOTOR_CLAVE_WEB%
+if "%~1"=="" (
+  echo  Acceso libre: cualquiera con la direccion puede entrar.
+) else (
+  set "MOTOR_CLAVE_WEB=%~1"
+  set "MOTOR_API_KEY=%~1"
+  echo  Contrasena para entrar: %~1   ^(usuario: cualquiera^)
+)
 echo ============================================================
 echo.
 
