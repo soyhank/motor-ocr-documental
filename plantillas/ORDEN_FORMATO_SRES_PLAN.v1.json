@@ -7,66 +7,370 @@
   "identification": {
     "minScoreThreshold": 80,
     "rules": [
-      {"type": "regex", "value": "Sres\\.:", "weight": 25},
-      {"type": "regex", "value": "PLAN N.:?\\s*\\d+\\s*-\\s*PRESUPUESTO", "weight": 35},
-      {"type": "exact_text", "value": "Moneda:", "weight": 15},
-      {"type": "exact_text", "value": "Recibido del Medio", "weight": 15},
-      {"type": "not_text", "value": "PROVEEDOR REAL", "weight": 10}
+      {
+        "type": "regex",
+        "value": "Sres\\.:",
+        "weight": 25
+      },
+      {
+        "type": "regex",
+        "value": "PLAN N.:?\\s*\\d+\\s*-\\s*PRESUPUESTO",
+        "weight": 35
+      },
+      {
+        "type": "exact_text",
+        "value": "Moneda:",
+        "weight": 15
+      },
+      {
+        "type": "exact_text",
+        "value": "Recibido del Medio",
+        "weight": 15
+      },
+      {
+        "type": "not_text",
+        "value": "PROVEEDOR REAL",
+        "weight": 10
+      }
     ]
   },
-  "options": {"decimalSeparator": "auto"},
+  "options": {
+    "decimalSeparator": "auto"
+  },
   "header": {
     "fields": [
-      {"name": "agencia", "tag": "AGENCIA_NOMBRE", "region": {"page": 1, "x1": 450, "y1": 52}, "lineIndex": 0, "required": true},
-      {"name": "agencia_direccion", "tag": "AGENCIA_DIRECCION", "region": {"page": 1, "x1": 450, "y0": 52, "y1": 90}, "allLines": true},
-      {"name": "numero_orden", "tag": "ORDEN_NUMERO", "anchor": {"pattern": "ORDEN N[o°]", "searchDirection": "RIGHT", "maxDistance": 120}, "valuePattern": "^(\\d+)", "required": true},
-      {"name": "fecha_emision", "tag": "ORDEN_FECHA", "anchor": {"pattern": "FECHA:", "searchDirection": "RIGHT", "maxDistance": 200}, "type": "date", "required": true},
-      {"name": "proveedor", "tag": "PROVEEDOR_NOMBRE", "anchor": {"pattern": "Sres\\.:", "searchDirection": "RIGHT", "maxDistance": 240}},
-      {"name": "proveedor_direccion", "tag": "PROVEEDOR_DIRECCION", "anchor": {"pattern": "Sres\\.:", "searchDirection": "RELATIVE_BOX", "box": {"dx0": 25, "dx1": 260, "dy0": 12, "dy1": 45}}},
-      {"name": "proveedor_ruc", "tag": "PROVEEDOR_RUC", "anchor": {"pattern": "R\\.U\\.C\\.:", "searchDirection": "RIGHT", "maxDistance": 150}, "type": "ruc"},
-      {"name": "ciudad", "tag": "COBERTURA", "anchor": {"pattern": "Zona:", "searchDirection": "RIGHT", "maxDistance": 200}},
-      {"name": "periodo", "tag": "PERIODO", "anchor": {"pattern": "Per[ií]odo:", "searchDirection": "RIGHT", "maxDistance": 200}, "type": "period", "required": true},
-      {"name": "mes", "tag": "MES", "anchor": {"pattern": "Per[ií]odo:", "searchDirection": "RIGHT", "maxDistance": 200}, "type": "month"},
-      {"name": "campana", "tag": "CAMPANA", "anchor": {"pattern": "Campa[ñn]a\\s*:", "searchDirection": "RIGHT", "maxDistance": 250}},
-      {"name": "producto", "tag": "PRODUCTO", "anchor": {"pattern": "Producto:", "searchDirection": "RIGHT", "maxDistance": 250}},
-      {"name": "medio", "tag": "MEDIO", "anchor": {"pattern": "Medio:", "searchDirection": "RIGHT", "maxDistance": 250}, "required": true},
-      {"name": "moneda", "tag": "MONEDA", "anchor": {"pattern": "Moneda:", "searchDirection": "RIGHT", "maxDistance": 120}, "type": "currency"},
-      {"name": "plan", "tag": "PLAN_NUMERO", "anchor": {"pattern": "PLAN N[o°]:", "searchDirection": "RIGHT", "maxDistance": 80}, "valuePattern": "(\\d+)"},
-      {"name": "presupuesto", "tag": "PRESUPUESTO_NUMERO", "anchor": {"pattern": "PRESUPUESTO N[o°]:", "searchDirection": "RIGHT", "maxDistance": 80}, "valuePattern": "(\\d+)"},
-      {"name": "anunciante", "tag": "ANUNCIANTE_NOMBRE", "anchor": {"pattern": "Cliente:", "searchDirection": "RIGHT", "maxDistance": 300}},
-      {"name": "anunciante_direccion", "tag": "ANUNCIANTE_DIRECCION", "anchor": {"pattern": "Cliente:", "searchDirection": "RELATIVE_BOX", "box": {"dx0": -5, "dx1": 320, "dy0": 12, "dy1": 42}}},
-      {"name": "anunciante_ruc", "tag": "ANUNCIANTE_RUC", "anchor": {"pattern": "RUC:", "searchDirection": "RIGHT", "maxDistance": 150, "region": {"x0": 550}}, "type": "ruc"},
-      {"name": "facturar_a", "tag": "FACTURAR_A", "anchor": {"pattern": "FACTURAR A:", "searchDirection": "DOWN", "maxDistance": 30, "xExtra": 120}},
-      {"name": "observaciones", "tag": "OBSERVACIONES", "anchor": {"pattern": "Observaciones", "caseSensitive": true, "searchDirection": "RELATIVE_BOX", "box": {"dx0": -5, "dx1": 600, "dy0": 10, "dy1": 60}}},
-      {"name": "emitido_por", "tag": "EMITIDO_POR", "region": {"page": 1, "x0": 220, "x1": 500, "y0": 900, "y1": 960}, "lineIndex": 0, "valuePattern": "^(?!Medio$)(.+)$"}
+      {
+        "name": "agencia",
+        "tag": "AGENCIA_NOMBRE",
+        "region": {
+          "page": 1,
+          "x1": 450,
+          "y1": 52
+        },
+        "lineIndex": 0,
+        "required": true
+      },
+      {
+        "name": "agencia_direccion",
+        "tag": "AGENCIA_DIRECCION",
+        "region": {
+          "page": 1,
+          "x1": 450,
+          "y0": 52,
+          "y1": 90
+        },
+        "allLines": true
+      },
+      {
+        "name": "numero_orden",
+        "tag": "ORDEN_NUMERO",
+        "anchor": {
+          "pattern": "ORDEN N[o°]?",
+          "searchDirection": "RIGHT",
+          "maxDistance": 120
+        },
+        "valuePattern": "^(\\d+)",
+        "required": true
+      },
+      {
+        "name": "fecha_emision",
+        "tag": "ORDEN_FECHA",
+        "anchor": {
+          "pattern": "FECHA:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "proveedor",
+        "tag": "PROVEEDOR_NOMBRE",
+        "anchor": {
+          "pattern": "Sres\\.:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 240
+        }
+      },
+      {
+        "name": "proveedor_direccion",
+        "tag": "PROVEEDOR_DIRECCION",
+        "anchor": {
+          "pattern": "Sres\\.:",
+          "searchDirection": "RELATIVE_BOX",
+          "box": {
+            "dx0": 25,
+            "dx1": 260,
+            "dy0": 12,
+            "dy1": 45
+          }
+        }
+      },
+      {
+        "name": "proveedor_ruc",
+        "tag": "PROVEEDOR_RUC",
+        "anchor": {
+          "pattern": "R\\.U\\.C\\.:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 150
+        },
+        "type": "ruc"
+      },
+      {
+        "name": "ciudad",
+        "tag": "COBERTURA",
+        "anchor": {
+          "pattern": "Zona:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        }
+      },
+      {
+        "name": "periodo",
+        "tag": "PERIODO",
+        "anchor": {
+          "pattern": "Per[ií]odo:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "period",
+        "required": true
+      },
+      {
+        "name": "mes",
+        "tag": "MES",
+        "anchor": {
+          "pattern": "Per[ií]odo:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "month"
+      },
+      {
+        "name": "campana",
+        "tag": "CAMPANA",
+        "anchor": {
+          "pattern": "Campa[ñn]a\\s*:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 250
+        }
+      },
+      {
+        "name": "producto",
+        "tag": "PRODUCTO",
+        "anchor": {
+          "pattern": "Producto:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 250
+        }
+      },
+      {
+        "name": "medio",
+        "tag": "MEDIO",
+        "anchor": {
+          "pattern": "Medio:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 250
+        },
+        "required": true
+      },
+      {
+        "name": "moneda",
+        "tag": "MONEDA",
+        "anchor": {
+          "pattern": "Moneda:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 120
+        },
+        "type": "currency"
+      },
+      {
+        "name": "plan",
+        "tag": "PLAN_NUMERO",
+        "anchor": {
+          "pattern": "PLAN N[o°]:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 80
+        },
+        "valuePattern": "(\\d+)"
+      },
+      {
+        "name": "presupuesto",
+        "tag": "PRESUPUESTO_NUMERO",
+        "anchor": {
+          "pattern": "PRESUPUESTO N[o°]:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 80
+        },
+        "valuePattern": "(\\d+)"
+      },
+      {
+        "name": "anunciante",
+        "tag": "ANUNCIANTE_NOMBRE",
+        "anchor": {
+          "pattern": "Cliente:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 300
+        }
+      },
+      {
+        "name": "anunciante_direccion",
+        "tag": "ANUNCIANTE_DIRECCION",
+        "anchor": {
+          "pattern": "Cliente:",
+          "searchDirection": "RELATIVE_BOX",
+          "box": {
+            "dx0": -5,
+            "dx1": 320,
+            "dy0": 12,
+            "dy1": 42
+          }
+        }
+      },
+      {
+        "name": "anunciante_ruc",
+        "tag": "ANUNCIANTE_RUC",
+        "anchor": {
+          "pattern": "RUC:",
+          "searchDirection": "RIGHT",
+          "maxDistance": 150,
+          "region": {
+            "x0": 550
+          }
+        },
+        "type": "ruc"
+      },
+      {
+        "name": "facturar_a",
+        "tag": "FACTURAR_A",
+        "anchor": {
+          "pattern": "FACTURAR A:",
+          "searchDirection": "DOWN",
+          "maxDistance": 30,
+          "xExtra": 120
+        }
+      },
+      {
+        "name": "observaciones",
+        "tag": "OBSERVACIONES",
+        "anchor": {
+          "pattern": "Observaciones",
+          "caseSensitive": true,
+          "searchDirection": "RELATIVE_BOX",
+          "box": {
+            "dx0": -5,
+            "dx1": 600,
+            "dy0": 10,
+            "dy1": 60
+          }
+        }
+      },
+      {
+        "name": "emitido_por",
+        "tag": "EMITIDO_POR",
+        "region": {
+          "page": 1,
+          "x0": 220,
+          "x1": 500,
+          "y0": 900,
+          "y1": 960
+        },
+        "lineIndex": 0,
+        "valuePattern": "^(?!Medio$)(.+)$"
+      }
     ]
   },
   "detail": {
     "isTable": true,
     "headerAnchors": [
-      {"name": "descripcion", "pattern": "Descripci[oó]n"},
-      {"name": "horario", "pattern": "Horario", "type": "schedule"},
-      {"name": "duracion", "pattern": "Duraci[oó]n", "type": "duration"},
-      {"name": "costo_total", "pattern": "C\\.\\s*Total", "type": "money"},
-      {"name": "total_avisos", "pattern": "Total", "type": "int"},
-      {"name": "costo_unitario", "pattern": "C\\.\\s*Unitario", "type": "money"}
+      {
+        "name": "descripcion",
+        "pattern": "Descripci[oó]n"
+      },
+      {
+        "name": "horario",
+        "pattern": "Horario",
+        "type": "schedule"
+      },
+      {
+        "name": "duracion",
+        "pattern": "Duraci[oó]n",
+        "type": "duration"
+      },
+      {
+        "name": "costo_total",
+        "pattern": "C\\.\\s*Total",
+        "type": "money"
+      },
+      {
+        "name": "total_avisos",
+        "pattern": "Total",
+        "type": "int"
+      },
+      {
+        "name": "costo_unitario",
+        "pattern": "C\\.\\s*Unitario",
+        "type": "money"
+      }
     ],
     "dayColumns": true,
     "rowMode": "anchor",
     "anchorColumn": "total_avisos",
     "stopAnchor": "Total\\b",
-    "descriptionFields": {"programa": "^([^\\n]+)", "tipo_aviso": "\\n([^\\n]+)$"},
+    "descriptionFields": {
+      "programa": "^([^\\n]+)",
+      "tipo_aviso": "\\n([^\\n]+)$"
+    },
     "bonusPattern": "BONIF",
-    "calendarFrom": ["mes", "periodo_inicio", "fecha_emision"]
+    "calendarFrom": [
+      "mes",
+      "periodo_inicio",
+      "fecha_emision"
+    ]
   },
   "totals": {
     "searchBelowTable": true,
     "fields": [
-      {"name": "igv_pct", "tag": "TOT_IGV_TASA", "anchor": {"pattern": "IGV", "searchDirection": "RIGHT", "maxDistance": 60}, "valuePattern": "([\\d.,]+)\\s*%", "type": "percent"},
-      {"name": "igv", "tag": "TOT_IGV", "anchor": {"pattern": "IGV(\\s+[\\d.,]+%)?", "searchDirection": "RIGHT", "maxDistance": 200}, "valuePattern": "([\\d.,]+)$", "type": "money", "required": true},
-      {"name": "total", "tag": "TOT_TOTAL", "anchor": {"pattern": "TOTAL", "caseSensitive": true, "searchDirection": "RIGHT", "maxDistance": 200}, "type": "money", "required": true}
+      {
+        "name": "igv_pct",
+        "tag": "TOT_IGV_TASA",
+        "anchor": {
+          "pattern": "IGV",
+          "searchDirection": "RIGHT",
+          "maxDistance": 60
+        },
+        "valuePattern": "([\\d.,]+)\\s*%",
+        "type": "percent"
+      },
+      {
+        "name": "igv",
+        "tag": "TOT_IGV",
+        "anchor": {
+          "pattern": "IGV(\\s+[\\d.,]+%)?",
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "valuePattern": "([\\d.,]+)$",
+        "type": "money",
+        "required": true
+      },
+      {
+        "name": "total",
+        "tag": "TOT_TOTAL",
+        "anchor": {
+          "pattern": "TOTAL",
+          "caseSensitive": true,
+          "searchDirection": "RIGHT",
+          "maxDistance": 200
+        },
+        "type": "money",
+        "required": true
+      }
     ],
-    "fromFooter": {"neto": "costo_total", "total_avisos": "total_avisos"}
+    "fromFooter": {
+      "neto": "costo_total",
+      "total_avisos": "total_avisos"
+    }
   },
   "validations": []
 }

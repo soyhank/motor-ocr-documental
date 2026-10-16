@@ -176,7 +176,7 @@ def moneda(s) -> str | None:
     t = sin_tildes(str(s)).upper()
     if "US$" in t or "USD" in t or "DOLAR" in t or re.search(r"(^|\s)\$", t):
         return "USD"
-    if "S/" in t or "SOL" in t or "PEN" in t:
+    if "S/" in t or "/S" in t or "SOL" in t or "PEN" in t:
         return "PEN"
     return None
 

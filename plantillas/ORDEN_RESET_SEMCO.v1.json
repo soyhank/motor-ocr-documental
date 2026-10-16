@@ -384,7 +384,7 @@
           "searchDirection": "RIGHT",
           "maxDistance": 200
         },
-        "valuePattern": "(S/|US\\$|\\$)",
+        "valuePattern": "(S/|/S|US\\$|\\$)",
         "type": "currency"
       }
     ],

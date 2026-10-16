@@ -18,6 +18,7 @@ class Ancla:
     tokens: list[Token]
     linea: Linea
     idx_fin: int  # índice del último token del ancla dentro de la línea
+    exacta: bool = True  # False si se aceptó por parecido (OCR)
 
     @property
     def x0(self):
@@ -96,7 +97,9 @@ def _parecido(texto: str, literal: str) -> bool:
     b = re.sub(r"\s+", "", literal).upper()
     if abs(len(a) - len(b)) > 2 or not a or not b:
         return False
-    return fuzz.ratio(a, b) >= 80 and a[0] == b[0]
+    # mismo inicio y mismo final: así la etiqueta no se "come" el valor ("PRODUCTO:M")
+    # ni se confunde con otra parecida ("MEDIO:" frente a "MEDIOS")
+    return fuzz.ratio(a, b) >= 80 and a[0] == b[0] and a[-1] == b[-1]
 
 
 def buscar_anclas(lineas: list[Linea], patron: str, sensible: bool = False, region: dict | None = None,
@@ -115,15 +118,18 @@ def buscar_anclas(lineas: list[Linea], patron: str, sensible: bool = False, regi
             if usados and id(toks[i]) in usados:
                 i += 1
                 continue
+            exacta = True
             for j in range(i, min(len(toks), i + max_tokens)):
                 if usados and id(toks[j]) in usados:
                     break
                 unido = sin_tildes(" ".join(t.text for t in toks[i:j + 1]))
-                if (rx.fullmatch(unido) or any(rx.fullmatch(v) for v in _variantes_ocr(unido))
-                        or (literal is not None and l.page_ocr and _parecido(unido, literal))):
-                    mejor = j
+                if rx.fullmatch(unido) or any(rx.fullmatch(v) for v in _variantes_ocr(unido)):
+                    mejor, exacta = j, True
+                elif literal is not None and not sensible and l.page_ocr and _parecido(unido, literal):
+                    if mejor is None:
+                        mejor, exacta = j, False
             if mejor is not None:
-                a = Ancla(toks[i:mejor + 1], l, mejor)
+                a = Ancla(toks[i:mejor + 1], l, mejor, exacta)
                 if _en_region(a, region):
                     res.append(a)
                 i = mejor + 1
@@ -256,6 +262,8 @@ def extraer_campo(campo: dict, lineas: list[Linea], opciones: dict, limite_y: tu
     candidatos = buscar_anclas(lineas, anc["pattern"], anc.get("caseSensitive", False), region or None)
     if not candidatos:
         return None
+    # las coincidencias exactas van primero; las aproximadas (OCR) solo si no hay otra
+    candidatos.sort(key=lambda a: not a.exacta)
     nth = anc.get("nth", 0)
     candidatos = candidatos[nth:] if nth >= 0 else candidatos[nth:]
     direccion = anc.get("searchDirection", "RIGHT").upper()
@@ -435,6 +443,16 @@ def detectar_columnas(pag: Pagina, lineas: list[Linea], cfg: dict) -> tuple[list
     for d, a in encontrados:
         x0, x1 = a.x0, a.x1
         cols.append(Columna(d["name"], d.get("type", "text"), x0, x1, (x0 + x1) / 2))
+    if not dias and cfg.get("dayColumns", True) and cfg.get("useRulings", True) and pag.origen == "ocr":
+        celdas = _grilla_sin_numeros(pag, y_ini, y_fin, cols, cfg)
+        if celdas:
+            cand = [t for l in lp for t in l.tokens
+                    if y_ini - 25 <= t.cy <= y_fin + 5 and sin_tildes(t.text).upper() in DIAS_SEMANA and id(t) not in usados]
+            for d, (x0, x1) in celdas.items():
+                cx = (x0 + x1) / 2
+                cerca = [t for t in cand if abs(t.cx - cx) < (x1 - x0) * 0.45]
+                letra = sin_tildes(min(cerca, key=lambda t: abs(t.cx - cx)).text).upper() if cerca else None
+                cols.append(Columna(f"d{d}", "int", x0, x1, cx, dia=d, letra=letra))
     if dias:
         paso = (dias[-1].cx - dias[0].cx) / max(int(dias[-1].text) - int(dias[0].text), 1)
         izq = max([c.x1 for c in cols if c.dia is None and c.cx < dias[0].cx] + [0])
@@ -530,6 +548,41 @@ def _celdas_por_reglas(pag: Pagina, dias: list[Token], izq: float, der: float, p
     return out if len(out) >= 7 else None
 
 
+def _grilla_sin_numeros(pag: Pagina, y0: float, y1: float, cols: list[Columna], cfg: dict) -> dict | None:
+    """Cuando el OCR no leyó los números de los días pero la tabla tiene líneas verticales,
+    la corrida más larga de celdas de ancho parecido (27 a 31) es la grilla: días 1..N."""
+    ultimo = cfg.get("maxDays", 31)
+    xs = sorted(x for x, a, b in pag.verticales if a <= y1 + 8 and b >= y0 - 2 and b - a > 8)
+    reglas: list[float] = []
+    for x in xs:
+        if not reglas or x - reglas[-1] > 2:
+            reglas.append(x)
+    if len(reglas) < 20:
+        return None
+    anchos = [b - a for a, b in zip(reglas, reglas[1:])]
+    mejor: tuple[int, int] | None = None  # (inicio, fin) en índices de celdas
+    i = 0
+    while i < len(anchos):
+        j = i
+        ref = anchos[i]
+        while j + 1 < len(anchos) and abs(anchos[j + 1] - ref) <= 0.25 * ref:
+            j += 1
+        if mejor is None or j - i > mejor[1] - mejor[0]:
+            mejor = (i, j)
+        i = j + 1
+    if mejor is None:
+        return None
+    n = mejor[1] - mejor[0] + 1
+    if not 27 <= n <= ultimo:
+        return None
+    celdas = [(reglas[k], reglas[k + 1]) for k in range(mejor[0], mejor[1] + 1)]
+    # la grilla no puede pisar una columna con nombre
+    for c in cols:
+        if c.dia is None and c.x0 < celdas[-1][1] - 1 and c.x1 > celdas[0][0] + 1:
+            return None
+    return {d + 1: celdas[d] for d in range(n)}
+
+
 def _asignar(t: Token, cols: list[Columna]) -> Columna | None:
     dentro = [c for c in cols if c.x0 - 0.5 <= t.cx <= c.x1 + 0.5]
     if dentro:
@@ -589,12 +642,16 @@ def _releer_celdas(linea: Linea, cols: list[Columna], pag: Pagina, out: dict, ti
                 continue
         elif not re.fullmatch(r"-?\d[\d.,]*", limpio):
             continue
-        if actual and " ".join(t.text for t in actual) == limpio:
+        texto_det = " ".join(t.text for t in actual) if actual else ""
+        if actual and texto_det == limpio:
             continue
-        # si el detector ya leyó un número válido con confianza parecida o mejor, se respeta
         if actual and all(_RX_NUM.match(t.text) for t in actual):
             conf_det = min(t.conf for t in actual)
+            # el detector ya leyó un número válido con confianza parecida o mejor: se respeta
             if conf_det >= conf - 0.05:
+                continue
+            # la relectura solo le añade dígitos (se coló un vecino por la inclinación): se respeta
+            if len(limpio) > len(texto_det) and texto_det in limpio:
                 continue
         out[c.nombre] = [Token(limpio, c.x0 + 1, linea.y0, c.x1 - 1, linea.y1, pag.numero, conf=conf)]
 

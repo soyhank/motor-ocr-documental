@@ -390,13 +390,19 @@ def _ocr_franja(motor, franja: np.ndarray, desplaz_y: int, min_score: float = 0.
     """Detector, recorte y reconocedor llamados por separado. El modo return_word_box de la
     librería descarta renglones largos y deja el motor en mal estado, así que las cajas
     por carácter se calculan aquí a partir de las columnas de decodificación."""
+    import cv2
+
     boxes, _ = motor.text_det(franja)
     if boxes is None or len(boxes) == 0:
         return []
     crops = motor.get_crop_img_list(franja, boxes)
-    rec, _ = motor.text_rec(crops, True)
+    # con un margen blanco a los lados el reconocedor sí marca los espacios entre palabras
+    margenes = [max(12, int(0.6 * c.shape[0])) for c in crops]
+    acolchados = [cv2.copyMakeBorder(c, 4, 4, m, m, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+                  for c, m in zip(crops, margenes)]
+    rec, _ = motor.text_rec(acolchados, True)
     items = []
-    for box, r in zip(boxes, rec):
+    for box, r, margen, crop in zip(boxes, rec, margenes, crops):
         texto, score = r[0], float(r[1])
         if score < min_score or not texto.strip():
             continue
@@ -409,9 +415,11 @@ def _ocr_franja(motor, franja: np.ndarray, desplaz_y: int, min_score: float = 0.
             if "".join(chars) == texto and len(cols) == len(chars) and col_num:
                 x0, x1 = caja[0][0], caja[1][0]
                 y0, y1 = min(p[1] for p in caja), max(p[1] for p in caja)
-                celda = (x1 - x0) / float(col_num)
-                cajas_car = [[[x0 + c * celda, y0], [x0 + (c + 1) * celda, y0],
-                              [x0 + (c + 1) * celda, y1], [x0 + c * celda, y1]] for c in cols]
+                escala = (x1 - x0) / max(crop.shape[1], 1)  # px de página por px de recorte
+                celda = (crop.shape[1] + 2 * margen) * escala / float(col_num)
+                base = x0 - margen * escala
+                cajas_car = [[[base + c * celda, y0], [base + (c + 1) * celda, y0],
+                              [base + (c + 1) * celda, y1], [base + c * celda, y1]] for c in cols]
         except (IndexError, TypeError):
             cajas_car = None
         items.append((caja, texto, score, cajas_car))
@@ -479,6 +487,8 @@ def _pulir_token_ocr(texto: str) -> list[str]:
     - "RUC:20566514622", "Rv.0" o "Reset/Estado:" se parten en etiqueta y valor;
     - en tokens mayormente numéricos, O->0 e I/l->1 (confusiones típicas)."""
     texto = unicodedata.normalize("NFKC", texto)
+    if re.fullmatch(r"[■□▪●◦|¦_~^`´¨•·]+", texto):
+        return []  # restos de líneas o manchas leídos como símbolos
     texto = re.sub(r"(?<=[A-Za-z])0(?=[A-Za-z])", "O", texto)
     partes = []
     for trozo in re.split(r"(?<=[A-Za-z])(/)(?=[A-Za-z])", texto):
