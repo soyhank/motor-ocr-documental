@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .catalogo import canonizar
 from .ingesta import Documento, Linea, Pagina, Token, agrupar_lineas
 from .normalizar import DIAS_SEMANA, normalizar, sin_tildes
 
@@ -109,6 +110,9 @@ def buscar_anclas(lineas: list[Linea], patron: str, sensible: bool = False, regi
     casi literal, también se acepta una lectura parecida (errores típicos de OCR)."""
     rx = _compilar(patron, sensible)
     literal = _literal_de(patron)
+    # en escaneados los dos puntos finales de la etiqueta a veces no se leen
+    sin_dp = re.sub(r"(\\s\*|\s)*:\??$", "", patron)
+    rx_sin_dp = _compilar(sin_dp, sensible) if sin_dp != patron and sin_dp else None
     res = []
     for l in lineas:
         toks = l.tokens
@@ -123,11 +127,20 @@ def buscar_anclas(lineas: list[Linea], patron: str, sensible: bool = False, regi
                 if usados and id(toks[j]) in usados:
                     break
                 unido = sin_tildes(" ".join(t.text for t in toks[i:j + 1]))
-                if rx.fullmatch(unido) or any(rx.fullmatch(v) for v in _variantes_ocr(unido)):
+                if rx.fullmatch(unido) or any(rx.fullmatch(v) for v in _variantes_ocr(unido))                         or (l.page_ocr and j > i and rx.fullmatch(unido.replace(" ", ""))):
                     mejor, exacta = j, True
                 elif literal is not None and not sensible and l.page_ocr and _parecido(unido, literal):
                     if mejor is None:
                         mejor, exacta = j, False
+                elif (j == i and l.page_ocr and mejor is None and literal and literal.endswith(":")
+                      and " " not in literal and len(unido) > len(literal)
+                      and unido.upper().endswith(literal.upper())):
+                    # etiqueta pegada a la palabra anterior ('PREPACIUDAD:'): texto encimado o
+                    # renglones muy juntos en el escaneo
+                    mejor, exacta = j, False
+                elif (rx_sin_dp is not None and l.page_ocr and mejor is None and rx_sin_dp.fullmatch(unido)
+                      and (j + 1 >= len(toks) or not toks[j + 1].text.startswith(":"))):
+                    mejor, exacta = j, False
             if mejor is not None:
                 a = Ancla(toks[i:mejor + 1], l, mejor, exacta)
                 if _en_region(a, region):
@@ -221,13 +234,28 @@ def _continuacion(a: Ancla, primeras: list[Token], lineas: list[Linea], cfg: dic
 def _campo_region(campo: dict, lineas: list[Linea], opciones: dict) -> dict | None:
     """Campo sin etiqueta: texto dentro de una caja fija (p. ej. razón social del membrete)."""
     reg = campo["region"]
-    sel = []
-    for l in lineas:
-        if l.page != reg.get("page", 1):
-            continue
-        toks = [t for t in l.tokens if _en_region(t, reg)]
-        if toks:
-            sel.append(toks)
+
+    def _seleccion(r):
+        out = []
+        for l in lineas:
+            if l.page != r.get("page", 1):
+                continue
+            toks = [t for t in l.tokens if _en_region(t, r)]
+            if toks:
+                out.append(toks)
+        return out
+
+    sel = _seleccion(reg)
+    if not sel and lineas and lineas[0].page_ocr and not campo.get("allLines"):
+        # escaneo o foto algo corridos respecto del original: caja ampliada y el renglón
+        # más cercano al centro de la caja original
+        m = 15
+        amplia = dict(reg, x0=reg.get("x0", 0) - m, x1=reg.get("x1", 1000) + m,
+                      y0=reg.get("y0", 0) - m, y1=reg.get("y1", 1000) + m)
+        centro = (reg.get("y0", 0) + reg.get("y1", 1000)) / 2
+        sel = sorted(_seleccion(amplia), key=lambda ts: abs(sum(t.cy for t in ts) / len(ts) - centro))[:1]
+        if sel and campo.get("lineIndex", 0):
+            sel = []
     if not sel:
         return None
     if campo.get("allLines"):
@@ -282,6 +310,18 @@ def extraer_campo(campo: dict, lineas: list[Linea], opciones: dict, limite_y: tu
     return res
 
 
+def _sin_dos_puntos_falsos(toks: list[Token], ocr: bool) -> list[Token]:
+    """En escaneados, los dos puntos que siguen a la etiqueta a veces se leen como otro
+    signo o una letra suelta ('à', '•.', 'E' de baja confianza). Si el valor empieza con
+    un token así, se descarta."""
+    if not ocr or len(toks) < 2:
+        return toks
+    t = toks[0]
+    if len(t.text) <= 2 and (not re.fullmatch(r"[A-Za-z0-9]+", t.text) or (len(t.text) == 1 and t.conf < 0.8))             and not re.fullmatch(r"[$#(%+-]|S/|N[°º]", t.text):
+        return toks[1:]
+    return toks
+
+
 def _extraer_campo_ancla(campo: dict, lineas: list[Linea], opciones: dict, limite_y: tuple | None = None) -> dict | None:
     if "region" in campo and "anchor" not in campo:
         return _campo_region(campo, lineas, opciones)
@@ -303,7 +343,7 @@ def _extraer_campo_ancla(campo: dict, lineas: list[Linea], opciones: dict, limit
     for a in candidatos:
         toks: list[Token] = []
         if direccion in ("RIGHT", "RIGHT_OR_DOWN"):
-            toks = _valor_derecha(a, anc)
+            toks = _sin_dos_puntos_falsos(_valor_derecha(a, anc), a.linea.page_ocr)
             toks = _continuacion(a, toks, lineas, anc)
         if not toks and direccion in ("DOWN", "RIGHT_OR_DOWN"):
             toks = _valor_abajo(a, lineas, anc)
@@ -351,6 +391,11 @@ def extraer_campos(campos: list[dict], lineas: list[Linea], opciones: dict, limi
         v = extraer_campo(c, lineas, opciones, limite_y)
         if v is None and c.get("default") is not None:
             v = {"value": c["default"], "tag": c.get("tag", c["name"].upper()), "source": None, "default": True}
+        if v is not None and v.get("source") is not None and lineas and lineas[0].page_ocr                 and (c.get("type") or "text") == "text":
+            canon = canonizar(c["name"], v.get("value"))
+            if canon is not None and canon != v["value"]:
+                v["ocrValue"] = v["value"]
+                v["value"] = canon
         if v is not None:
             out[c["name"]] = v
     return out
@@ -677,6 +722,12 @@ def _releer_celdas(linea: Linea, cols: list[Columna], pag: Pagina, out: dict, ti
         texto_det = " ".join(t.text for t in actual) if actual else ""
         if actual and texto_det == limpio:
             continue
+        ancho = c.x1 - c.x0
+        desborda = actual and (min(t.x0 for t in actual) < c.x0 - 0.15 * ancho or max(t.x1 for t in actual) > c.x1 + 0.15 * ancho)
+        if c.dia is not None and desborda and len(texto_det) > len(limpio) and limpio in texto_det.replace(" ", ""):
+            # el detector pegó la celda vecina ('1010' sobre dos columnas): vale la relectura
+            out[c.nombre] = [Token(limpio, c.x0 + 1, linea.y0, c.x1 - 1, linea.y1, pag.numero, conf=conf)]
+            continue
         if actual and all(_RX_NUM.match(t.text) for t in actual):
             conf_det = min(t.conf for t in actual)
             # el detector ya leyó un número válido con confianza parecida o mejor: se respeta
@@ -794,6 +845,18 @@ def extraer_tabla(doc: Documento, cfg: dict, opciones: dict) -> dict:
     return {"rows": filas, "footer": pie, "columns": meta_cols, "limite": limite_tabla}
 
 
+def _orden_lectura(toks: list[Token]) -> list[Token]:
+    """Renglones visuales (centros a menos de medio alto) y, dentro de cada uno, de
+    izquierda a derecha; una leve inclinación no invierte '16:00 19:00'."""
+    renglones: list[list[Token]] = []
+    for t in sorted(toks, key=lambda t: t.cy):
+        if renglones and abs(t.cy - sum(x.cy for x in renglones[-1]) / len(renglones[-1])) < 0.5 * max(t.h, 1):
+            renglones[-1].append(t)
+        else:
+            renglones.append([t])
+    return [t for r in renglones for t in sorted(r, key=lambda t: t.x0)]
+
+
 def _fila(celdas: dict, cols: list[Columna], tipos: dict, opciones: dict, col_desc: str, seccion=None) -> dict:
     fila: dict = {"_dias": {}}
     crudo_total = []
@@ -801,7 +864,7 @@ def _fila(celdas: dict, cols: list[Columna], tipos: dict, opciones: dict, col_de
         toks = celdas.get(c.nombre)
         if not toks:
             continue
-        toks = sorted(toks, key=lambda t: (round(t.cy), t.x0))
+        toks = _orden_lectura(toks)
         crudo = " ".join(t.text for t in toks)
         crudo_total.append(crudo)
         if c.dia is not None:

@@ -1,0 +1,52 @@
+{
+  "_descripcion": "Datos maestros: como escriben las agencias los nombres que se repiten. En documentos escaneados, si el texto leido coincide con una de estas formas salvo espacios, tildes o puntuacion (o casi coincide), se reemplaza por la forma exacta. Agregar aqui cada agencia, anunciante o medio nuevo.",
+  "campos": {
+    "agencia": "agencias",
+    "facturar_a": "agencias",
+    "division": "divisiones",
+    "proveedor": "receptor",
+    "proveedor_real": "receptor",
+    "medio": "medios",
+    "ciudad": "ciudades",
+    "anunciante": "anunciantes",
+    "condicion_pago": "condiciones_pago",
+    "tipo_contrato": "tipos_contrato"
+  },
+  "listas": {
+    "agencias": [
+      "CHEIL PERU S.A.C.",
+      "INTERPUBLIC COLOMBIA S.A.S. SUCURSAL DEL PERU",
+      "Reset Comunicaciones S.A.C",
+      "FUNELL MEDIA S.A.C.",
+      "ESPECIALIDADES DIGITALES INTERNACIONALES",
+      "HAVAS+ S.A.C.",
+      "MEDIA DIALOGUE S.A.C."
+    ],
+    "divisiones": ["Reset", "ESPECIALIDADES OFFLINE", "ESPECIALIDADES ONLINE", "HAVAS+ OFF", "HAVAS+ ON"],
+    "receptor": [
+      "GRUPO RPP SAC",
+      "GRUPO RPP S.A.C.",
+      "GRUPORPP S.A.C.",
+      "GRUPORPP SAC",
+      "GRUPORPP SOCIEDAD ANONIMA CERRADA",
+      "GRUPO RPP SOCIEDAD ANONIMA CERRADA"
+    ],
+    "medios": [
+      "RPP", "RADIO RPP", "RPP_NOTICIAS", "RADIO RPP OMNET MD",
+      "Oxigeno", "OXIGENO-NN", "RADIO OXIGENO", "RADIO OXIGENO OMNET MD",
+      "RADIOLAZONA", "RADIO LA ZONA", "RADIO FELICIDAD", "RADIO CAPITAL", "RADIO CORAZON"
+    ],
+    "ciudades": ["NACIONAL", "NIVEL NACIONAL", "LIMA", "AREQUIPA", "TRUJILLO", "CHICLAYO", "PIURA", "CUSCO", "HUANCAYO", "IQUITOS"],
+    "anunciantes": [
+      "SAMSUNG",
+      "LATAM AIRLINES PERÚ S.A.",
+      "UNIVERSIDAD PRIVADA DEL NORTE S.A.C.",
+      "DIRECT TV PERU SRL.",
+      "TELEFONICA DEL PERU",
+      "MEDIA ANALYTICS",
+      "AMERICA MOVIL PERU S.A.C."
+    ],
+    "condiciones_pago": ["60 días", "60 DIAS F.F.", "30 DIAS F.F.", "30 días", "90 DIAS F.F."],
+    "tipos_contrato": ["Efectivo", "Canje"]
+  }
+}

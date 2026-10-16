@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import sys
 from pathlib import Path
@@ -95,7 +96,7 @@ def cmd_web(a):
     import uvicorn
 
     print(f"Abre http://127.0.0.1:{a.puerto}")
-    uvicorn.run("motor.web:app", host="127.0.0.1", port=a.puerto)
+    uvicorn.run("motor.web:app", host=a.host, port=a.puerto)
 
 
 def main():
@@ -118,7 +119,8 @@ def main():
     p = sub.add_parser("plantillas")
     p.set_defaults(f=cmd_plantillas)
     p = sub.add_parser("web")
-    p.add_argument("--puerto", type=int, default=8765)
+    p.add_argument("--puerto", type=int, default=int(os.environ.get("PORT", 8765)))
+    p.add_argument("--host", default="127.0.0.1", help="0.0.0.0 para abrirlo a la red o en un servidor")
     p.set_defaults(f=cmd_web)
     a = ap.parse_args()
     a.f(a)

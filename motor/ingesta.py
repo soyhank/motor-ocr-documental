@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -201,6 +202,7 @@ def preprocesar(img: np.ndarray) -> dict:
     import cv2
 
     gris = img if img.ndim == 2 else cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gris = _rectificar_hoja(gris)
     if max(gris.shape) < LADO_OBJETIVO * 0.8:
         f = LADO_OBJETIVO / max(gris.shape)
         gris = cv2.resize(gris, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC)
@@ -221,6 +223,114 @@ def preprocesar(img: np.ndarray) -> dict:
         x, y, w, h, _ = stats[i]
         verticales.append(((x + w / 2) / W * 1000, y / H * 1000, (y + h) / H * 1000))
     return {"gris": gris, "binaria": bw, "ocr": para_ocr, "verticales": verticales}
+
+
+def _ordenar_esquinas(p: np.ndarray) -> np.ndarray:
+    s, d = p.sum(axis=1), np.diff(p, axis=1).ravel()
+    return np.float32([p[np.argmin(s)], p[np.argmin(d)], p[np.argmax(s)], p[np.argmax(d)]])
+
+
+def _borde_de_hoja(chica: np.ndarray, lado: str) -> tuple | None:
+    """Recta del borde de la hoja en un lado ('arriba', 'abajo', 'izq', 'der'): desde el
+    borde de la imagen hacia adentro, el primer salto de fondo oscuro y parejo a papel
+    claro, en muchas líneas de barrido. Devuelve (punto, dirección) o None si la hoja
+    llega al borde (escaneo) o los puntos no forman una recta."""
+    import cv2
+
+    img = {"arriba": chica, "abajo": chica[::-1], "izq": chica.T, "der": chica.T[::-1]}[lado]
+    n, m = img.shape  # n: profundidad hacia adentro, m: a lo largo del borde
+    hondo = int(n * 0.15)
+    xs = np.arange(int(m * 0.08), int(m * 0.92), 4)
+    if hondo < 20 or len(xs) == 0:
+        return None
+    # perfiles hacia adentro (promedio de 3 columnas), uno por línea de barrido: (hondo, len(xs))
+    franja = img[:hondo].astype(np.float32)
+    suav = (franja[:, np.clip(xs - 1, 0, m - 1)] + franja[:, xs] + franja[:, np.clip(xs + 1, 0, m - 1)]) / 3
+    c1 = np.vstack([np.zeros((1, len(xs)), np.float32), np.cumsum(suav, axis=0)])
+    c2 = np.vstack([np.zeros((1, len(xs)), np.float32), np.cumsum(suav * suav, axis=0)])
+    pts = []
+    ks = np.arange(4, hondo - 12)
+    a0 = np.maximum(ks - 30, 0)
+    a1 = ks - 2
+    na = (a1 - a0)[:, None].astype(np.float32)
+    m_antes = (c1[a1] - c1[a0]) / na
+    v_antes = np.maximum((c2[a1] - c2[a0]) / na - m_antes ** 2, 0)
+    m_desp = (c1[ks + 12] - c1[ks + 2]) / 10
+    # mínimo después y máximo antes, con ventanas deslizantes
+    from numpy.lib.stride_tricks import sliding_window_view
+    min_desp = sliding_window_view(suav, 10, axis=0).min(axis=2)[ks + 2]
+    cum_max = np.maximum.accumulate(suav, axis=0)
+    max_antes = cum_max[a1 - 1]  # máximo desde el borde: más estricto que la ventana
+    ok = (m_desp - m_antes > 25) & (np.sqrt(v_antes) < 12) & (min_desp > max_antes) & (na >= 2)
+    hay = ok.any(axis=0)
+    primero = ok.argmax(axis=0)
+    # punto exacto del borde: donde la subida de brillo es más fuerte, cerca del salto hallado
+    grad = np.diff(suav, axis=0)
+    pts = []
+    for j, (x, k, h_) in enumerate(zip(xs, primero, hay)):
+        if not h_:
+            continue
+        a = int(ks[k]) - 3
+        tramo = grad[max(a, 0):a + 16, j]
+        if len(tramo) == 0:
+            continue
+        pico = max(a, 0) + int(np.argmax(tramo))
+        pts.append((int(x), pico + 0.5))
+    if len(pts) < 0.5 * (m * 0.84 / 4):
+        return None
+    p = np.float32(pts)
+    vx, vy, x0, y0 = cv2.fitLine(p, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
+    resid = np.abs((p[:, 0] - x0) * vy - (p[:, 1] - y0) * vx)
+    if np.median(resid) > 2.5:
+        return None
+    # vuelta a coordenadas de la imagen chica
+    def conv(x, y):
+        return {"arriba": (x, y), "abajo": (x, n - 1 - y), "izq": (y, x), "der": (n - 1 - y, x)}[lado]
+    a = np.float32(conv(x0, y0))
+    b = np.float32(conv(x0 + vx * 100, y0 + vy * 100))
+    return a, (b - a) / np.linalg.norm(b - a)
+
+
+def _rectificar_hoja(gris: np.ndarray) -> np.ndarray:
+    """Fotos de celular: si se ve el borde de la hoja sobre un fondo más oscuro, se
+    ubican sus cuatro bordes y se lleva la hoja a un rectángulo (corrige la perspectiva).
+    En un escaneo la hoja llega al borde del cuadro y no se toca nada."""
+    import cv2
+
+    H, W = gris.shape
+    f = min(1000 / max(H, W), 1.0)
+    chica = cv2.resize(gris, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else gris.copy()
+    chica = cv2.GaussianBlur(chica, (5, 5), 0).astype(np.float32)
+    h, w = chica.shape
+    marco = {"arriba": (np.float32([0, 0]), np.float32([1, 0])), "abajo": (np.float32([0, h - 1]), np.float32([1, 0])),
+             "izq": (np.float32([0, 0]), np.float32([0, 1])), "der": (np.float32([w - 1, 0]), np.float32([0, 1]))}
+    bordes = {k: _borde_de_hoja(chica, k) for k in marco}
+    if sum(b is not None for b in bordes.values()) < 2:
+        return gris
+    rectas = {k: bordes[k] or marco[k] for k in marco}
+
+    def cruce(r1, r2):
+        (p1, d1), (p2, d2) = r1, r2
+        mat = np.array([d1, -d2]).T
+        if abs(np.linalg.det(mat)) < 1e-6:
+            return None
+        t = np.linalg.solve(mat, p2 - p1)
+        return p1 + t[0] * d1
+
+    esq = [cruce(rectas["arriba"], rectas["izq"]), cruce(rectas["arriba"], rectas["der"]),
+           cruce(rectas["abajo"], rectas["der"]), cruce(rectas["abajo"], rectas["izq"])]
+    if any(e is None for e in esq):
+        return gris
+    q = np.float32(esq) / f
+    q[:, 0] = np.clip(q[:, 0], -0.05 * W, 1.05 * W)
+    q[:, 1] = np.clip(q[:, 1], -0.05 * H, 1.05 * H)
+    ancho = int(max(np.linalg.norm(q[1] - q[0]), np.linalg.norm(q[2] - q[3])))
+    alto = int(max(np.linalg.norm(q[3] - q[0]), np.linalg.norm(q[2] - q[1])))
+    if ancho < 0.5 * W or alto < 0.5 * H:
+        return gris
+    dst = np.float32([[0, 0], [ancho, 0], [ancho, alto], [0, alto]])
+    M = cv2.getPerspectiveTransform(q, dst)
+    return cv2.warpPerspective(gris, M, (ancho, alto), flags=cv2.INTER_CUBIC, borderValue=255)
 
 
 def _enderezar(gris: np.ndarray) -> np.ndarray:
@@ -262,6 +372,12 @@ def _sauvola(gris: np.ndarray, ventana: int = 31, k: float = 0.2, R: float = 128
 
 
 _OCR = None
+MODELO_DET = "det.onnx"                   # vacío: el detector PP-OCRv4 que trae rapidocr
+MODELO_REC = "PP-OCRv6_rec_medium.onnx"
+
+
+def _si_existe(p: Path) -> str | None:
+    return str(p) if p.is_file() else None
 
 
 def _motor_ocr():
@@ -272,7 +388,19 @@ def _motor_ocr():
         # largos donde dos columnas de texto se tocan
         # text_score bajo: con cajas por carácter la confianza de los renglones largos
         # baja y la librería los descartaría
-        _OCR = RapidOCR(det_box_thresh=0.3, text_score=0.3)
+        extra = {}
+        # por defecto, el reconocedor PP-OCRv6 multilingüe (lee tildes y Ñ) guardado en modelos/;
+        # OCR_DET_MODEL / OCR_REC_MODEL permiten probar otros
+        modelos = Path(__file__).resolve().parent.parent / "modelos"
+        det = os.environ.get("OCR_DET_MODEL") or _si_existe(modelos / MODELO_DET)
+        rec = os.environ.get("OCR_REC_MODEL") or _si_existe(modelos / MODELO_REC)
+        if det:
+            extra["det_model_path"] = det
+        if rec:
+            extra["rec_model_path"] = rec
+        if os.environ.get("OCR_HILOS"):
+            extra["intra_op_num_threads"] = int(os.environ["OCR_HILOS"])
+        _OCR = RapidOCR(det_box_thresh=0.3, text_score=0.3, **extra)
     return _OCR
 
 
@@ -386,6 +514,125 @@ def _rect(caja):
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def _bandas(bw: np.ndarray, minimo: float) -> list[tuple[int, int]]:
+    """Filas con tinta separadas por filas vacías (a, c) dentro de un recorte binario."""
+    vacia = (bw > 0).mean(axis=1) < 0.004
+    bandas, ini = [], None
+    for i, v in enumerate(vacia):
+        if not v and ini is None:
+            ini = i
+        elif v and ini is not None:
+            bandas.append((ini, i))
+            ini = None
+    if ini is not None:
+        bandas.append((ini, len(vacia)))
+    return [(a, c) for a, c in bandas if c - a >= minimo]
+
+
+def _partir_cajas_altas(img: np.ndarray, boxes: list) -> list:
+    """El detector a veces une dos renglones apretados en una sola caja (la cabecera de la
+    grilla: letras de los días arriba, números abajo y 'Total' centrado entre ambos). Leída
+    de una vez sale basura. Se corta la caja en tramos por las columnas sin tinta, cada
+    tramo en sus renglones, y los tramos vecinos con los mismos renglones se vuelven a unir."""
+    import cv2
+
+    if len(boxes) < 3:
+        return boxes
+    altos = [max(p[1] for p in b) - min(p[1] for p in b) for b in boxes]
+    tipico = float(np.median(altos))
+    gris = img if img.ndim == 2 else cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    out = []
+    for b, alto in zip(boxes, altos):
+        if alto < 1.6 * tipico:
+            out.append(b)
+            continue
+        x0, x1 = int(max(min(p[0] for p in b), 0)), int(max(p[0] for p in b))
+        y0, y1 = int(max(min(p[1] for p in b), 0)), int(max(p[1] for p in b))
+        zona = gris[y0:y1, x0:x1]
+        if zona.size == 0:
+            out.append(b)
+            continue
+        _, bw = cv2.threshold(zona, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        col = (bw > 0).any(axis=0)
+        # tramos de columnas con tinta; huecos de al menos un cuarto del alto típico
+        hueco = max(3, int(0.25 * tipico))
+        tramos, ini, vacias = [], None, 0
+        for x, v in enumerate(col):
+            if v:
+                if ini is None:
+                    ini = x
+                vacias = 0
+            elif ini is not None:
+                vacias += 1
+                if vacias >= hueco:
+                    tramos.append((ini, x - vacias + 1))
+                    ini, vacias = None, 0
+        if ini is not None:
+            tramos.append((ini, len(col) - vacias))
+        piezas = []  # (xa, xc, [(ya, yc), ...])
+        for a, c in tramos:
+            bs = _bandas(bw[:, a:c], 0.3 * tipico) or [(0, bw.shape[0])]
+            if piezas and len(piezas[-1][2]) == len(bs) and all(
+                    abs(p[0] - q[0]) < 0.4 * tipico and abs(p[1] - q[1]) < 0.4 * tipico
+                    for p, q in zip(piezas[-1][2], bs)):
+                xa, _, prev = piezas[-1]
+                piezas[-1] = (xa, c, [(min(p[0], q[0]), max(p[1], q[1])) for p, q in zip(prev, bs)])
+            else:
+                piezas.append((a, c, bs))
+        if not any(len(p[2]) >= 2 for p in piezas):
+            out.append(b)
+            continue
+        for xa, xc, bs in piezas:
+            for a, c in bs:
+                m = max(2, int(0.15 * (c - a)))
+                ya, yc = y0 + max(a - m, 0), y0 + min(c + m, y1 - y0)
+                out.append(np.array([[x0 + max(xa - 3, 0), ya], [x0 + xc + 3, ya],
+                                     [x0 + xc + 3, yc], [x0 + max(xa - 3, 0), yc]], dtype=np.float32))
+    return out
+
+
+def _releer_dudosos(motor, franja: np.ndarray, boxes: list, crops: list, margenes: list, rec: list,
+                    umbral: float = 0.9):
+    """Los renglones leídos con poca confianza se vuelven a leer con variantes del recorte
+    (caja algo más grande por si cortó letras, más nitidez, trazo más grueso) y se queda la
+    lectura de mayor confianza. Modifica rec y margenes en el lugar."""
+    import cv2
+
+    dudosos = [i for i, r in enumerate(rec) if 0 < float(r[1]) < umbral and str(r[0]).strip()]
+    if not dudosos:
+        return
+    H, W = franja.shape[:2]
+    variantes, origen = [], []  # (imagen acolchada, margen equivalente)
+    for i in dudosos:
+        c, m = crops[i], margenes[i]
+        h = c.shape[0]
+        # 1) caja ampliada: un cuarto del alto a cada lado
+        xs = [p[0] for p in boxes[i]]
+        ys = [p[1] for p in boxes[i]]
+        e = max(3, int(0.25 * h))
+        x0, x1 = int(max(min(xs) - e, 0)), int(min(max(xs) + e, W))
+        y0, y1 = int(max(min(ys) - e // 2, 0)), int(min(max(ys) + e // 2, H))
+        if x1 - x0 > 4 and y1 - y0 > 4:
+            amp = franja[y0:y1, x0:x1]
+            extra = int(min(xs)) - x0
+            variantes.append(cv2.copyMakeBorder(amp, 4, 4, m, m, cv2.BORDER_CONSTANT, value=(255, 255, 255)))
+            origen.append((i, m + extra))
+        # 2) más nitidez (máscara de enfoque)
+        suave = cv2.GaussianBlur(c, (0, 0), 1.2)
+        nitida = cv2.addWeighted(c, 1.8, suave, -0.8, 0)
+        variantes.append(cv2.copyMakeBorder(nitida, 4, 4, m, m, cv2.BORDER_CONSTANT, value=(255, 255, 255)))
+        origen.append((i, m))
+        # 3) trazo más grueso (texto fino o claro)
+        gruesa = cv2.erode(c, np.ones((2, 2), np.uint8))
+        variantes.append(cv2.copyMakeBorder(gruesa, 4, 4, m, m, cv2.BORDER_CONSTANT, value=(255, 255, 255)))
+        origen.append((i, m))
+    nuevos, _ = motor.text_rec(variantes, True)
+    for (i, m), r in zip(origen, nuevos):
+        if str(r[0]).strip() and float(r[1]) > float(rec[i][1]) + 0.02:
+            rec[i] = r
+            margenes[i] = m
+
+
 def _ocr_franja(motor, franja: np.ndarray, desplaz_y: int, min_score: float = 0.3) -> list:
     """Detector, recorte y reconocedor llamados por separado. El modo return_word_box de la
     librería descarta renglones largos y deja el motor en mal estado, así que las cajas
@@ -395,12 +642,15 @@ def _ocr_franja(motor, franja: np.ndarray, desplaz_y: int, min_score: float = 0.
     boxes, _ = motor.text_det(franja)
     if boxes is None or len(boxes) == 0:
         return []
+    boxes = _partir_cajas_altas(franja, list(boxes))
     crops = motor.get_crop_img_list(franja, boxes)
     # con un margen blanco a los lados el reconocedor sí marca los espacios entre palabras
     margenes = [max(12, int(0.6 * c.shape[0])) for c in crops]
     acolchados = [cv2.copyMakeBorder(c, 4, 4, m, m, cv2.BORDER_CONSTANT, value=(255, 255, 255))
                   for c, m in zip(crops, margenes)]
     rec, _ = motor.text_rec(acolchados, True)
+    rec = list(rec)
+    _releer_dudosos(motor, franja, boxes, crops, margenes, rec)
     items = []
     for box, r, margen, crop in zip(boxes, rec, margenes, crops):
         texto, score = r[0], float(r[1])
@@ -432,28 +682,46 @@ def _ocr_por_franjas(img: np.ndarray, alto_franja: int = 760, solape: int = 120)
     H = img.shape[0]
     motor = _motor_ocr()
     items = []
+    cortados: set[int] = set()
     y = 0
     while True:
         y1 = min(y + alto_franja, H)
-        items.extend(_ocr_franja(motor, img[y:y1], y))
+        for it in _ocr_franja(motor, img[y:y1], y):
+            r = _rect(it[0])
+            # renglón cortado por el borde de la franja: su duplicado de la otra franja va primero
+            if (y > 0 and r[1] <= y + 3) or (y1 < H and r[3] >= y1 - 3):
+                cortados.add(id(it))
+            items.append(it)
         if y1 >= H:
             break
         y = y1 - solape
-    # en las zonas de solape el mismo texto sale dos veces: se queda el más completo
-    items.sort(key=lambda it: -((_rect(it[0])[2] - _rect(it[0])[0]) * (_rect(it[0])[3] - _rect(it[0])[1])))
+    # en las zonas de solape el mismo texto sale dos veces: se queda el más completo.
+    # Las cajas que unen dos renglones (más altas que lo normal) van aparte: se quedan solo
+    # si los renglones sueltos no cubren ya la mayor parte de su área
+    def area(r):
+        return max(r[2] - r[0], 0) * max(r[3] - r[1], 0)
+
+    def inter(a, b):
+        return max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
+
+    altos = [(_rect(it[0])[3] - _rect(it[0])[1]) for it in items]
+    tipico = float(np.median(altos)) if altos else 0
+    normales = [it for it, h in zip(items, altos) if h <= 1.5 * tipico]
+    altas = [it for it, h in zip(items, altos) if h > 1.5 * tipico]
+    normales.sort(key=lambda it: (id(it) in cortados, -area(_rect(it[0]))))
     elegidos = []
-    for it in items:
+    for it in normales:
         a = _rect(it[0])
-        area_a = (a[2] - a[0]) * (a[3] - a[1])
-        repetido = False
-        for e in elegidos:
-            b = _rect(e[0])
-            inter = max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
-            if area_a and inter / area_a > 0.5:
-                repetido = True
-                break
-        if not repetido:
-            elegidos.append(it)
+        tope = 0.25 if id(it) in cortados else 0.5
+        if area(a) and any(inter(a, _rect(e[0])) / area(a) > tope for e in elegidos):
+            continue
+        elegidos.append(it)
+    for it in sorted(altas, key=lambda it: (id(it) in cortados, -area(_rect(it[0])))):
+        a = _rect(it[0])
+        cubierta = sum(inter(a, _rect(e[0])) for e in elegidos)
+        if area(a) and cubierta / area(a) > 0.45:
+            continue
+        elegidos.append(it)
     return elegidos
 
 
@@ -489,6 +757,13 @@ def _pulir_token_ocr(texto: str) -> list[str]:
     texto = unicodedata.normalize("NFKC", texto)
     if re.fullmatch(r"[■□▪●◦|¦_~^`´¨•·]+", texto):
         return []  # restos de líneas o manchas leídos como símbolos
+    # restos de líneas de la tabla pegados al borde de la palabra ('Total]', '|mí', '|lu|')
+    recortado = texto.strip("|[]¦")
+    if recortado:
+        texto = recortado
+    # el símbolo de soles borroso: 'S1', 'Sl', 'S|', '5/' -> 'S/' (si no, el 1 pasa por importe)
+    if re.fullmatch(r"[S5][1Il|/\\]", texto):
+        texto = "S/"
     texto = re.sub(r"(?<=[A-Za-z])0(?=[A-Za-z])", "O", texto)
     partes = []
     for trozo in re.split(r"(?<=[A-Za-z])(/)(?=[A-Za-z])", texto):
@@ -496,6 +771,9 @@ def _pulir_token_ocr(texto: str) -> list[str]:
     out = []
     for p in partes:
         digitos = sum(c.isdigit() for c in p)
+        # 'OOOOOO85': solo O/I y dígitos, con algún dígito -> es un número
+        if digitos and re.fullmatch(r"[0-9OoIl.,]+", p):
+            p = p.translate(str.maketrans("OoIl", "0011"))
         if digitos and digitos * 2 >= len(p.replace(".", "").replace(",", "")):
             for _ in range(2):
                 p = re.sub(r"(?<=[\d.,])[Oo]|[Oo](?=[\d.,])", "0", p)
@@ -528,7 +806,41 @@ def _pagina_ocr(png: bytes, numero: int) -> Pagina:
                     text=p, x0=px0 / W * 1000, y0=y0 / H * 1000, x1=px1 / W * 1000, y1=y1 / H * 1000,
                     page=numero, raw=(round(px0), round(y0), round(px1), round(y1)), conf=conf,
                 ))
+    pag.tokens = _depurar_tokens(pag.tokens)
     return pag
+
+
+# ideogramas, kana y hangul: el reconocedor multilingüe a veces convierte una raya o una
+# mancha en uno de estos caracteres; en órdenes en castellano nunca son texto real
+_RX_NO_LATINO = re.compile(r"[⺀-鿿가-힯豈-﫿ｦ-ﾟ]")
+
+
+def _depurar_tokens(tokens: list[Token]) -> list[Token]:
+    """Quita lo que no es texto real: caracteres no latinos y letras sueltas duplicadas
+    que el detector deja encima del comienzo de la palabra siguiente ('E' + 'Efectivo')."""
+    limpios = []
+    for t in tokens:
+        texto = _RX_NO_LATINO.sub("", t.text).strip()
+        if not texto:
+            continue
+        t.text = texto
+        limpios.append(t)
+    fuera = set()
+    for t in limpios:
+        if len(t.text) != 1 or t.text in ":/-%$#":
+            continue  # los signos útiles se quedan
+        for o in limpios:
+            if o is t or len(o.text) < 3 or abs(o.cy - t.cy) > max(t.h, o.h) * 0.5:
+                continue
+            solape = min(t.x1, o.x1) - max(t.x0, o.x0)
+            if solape > -0.3 * t.h / 2 and t.x0 <= o.x0 + 1 and o.text[0].lower() == t.text.lower():
+                fuera.add(id(t))
+                break
+            # signo suelto de baja confianza pegado al inicio de una palabra ('à', '.', '´')
+            if not re.fullmatch(r"[A-Za-z0-9:/%$#()+&-]", t.text) and t.conf < 0.7                     and -0.2 * t.h <= o.x0 - t.x1 < t.h * 1.2:
+                fuera.add(id(t))
+                break
+    return [t for t in limpios if id(t) not in fuera]
 
 
 # ---------------------------------------------------------------- entrada principal

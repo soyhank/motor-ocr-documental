@@ -4,5 +4,6 @@ __pycache__/
 .pytest_cache/
 .vercel/
 tests/escaneos/*.png
+tests/escaneos/*.jpg
 
 .vercel

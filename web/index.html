@@ -179,12 +179,17 @@ async function subir(files){
   for (const f of files.filter(f => !AUDIO.test(f.name))) docs.push(await comprimirImagen(f));
   docs.forEach(f => archivos[f.name] = f);
   const lotes = []; let act = [], bytes = 0;
+  // un escaneado (imagen o PDF pesado) pasa por el OCR y tarda 1 a 3 minutos: va solo en su envío
+  const pesado = f => IMAGEN.test(f.name) || f.size > 600 * 1024;
   for (const f of docs){
+    if (pesado(f)){ lotes.push([f]); continue; }
     if (act.length && (act.length >= MAX_LOTE_ARCHIVOS || bytes + f.size > MAX_LOTE_BYTES)){ lotes.push(act); act = []; bytes = 0; }
     act.push(f); bytes += f.size;
   }
   if (act.length) lotes.push(act);
-  let hecho = 0; progreso(0, docs.length, `Procesando 0 de ${docs.length}…`);
+  const hayEscaneos = docs.some(pesado);
+  const aviso = hayEscaneos ? " (los escaneados tardan 1 a 3 minutos cada uno)" : "";
+  let hecho = 0; progreso(0, docs.length, `Procesando 0 de ${docs.length}…${aviso}`);
   for (const l of lotes){
     const fd = new FormData(); l.forEach(f => fd.append("archivos", f));
     try {
@@ -196,7 +201,7 @@ async function subir(files){
     } catch (e) {
       l.forEach(f => lote.push({documentId: "ERR-" + Math.random().toString(36).slice(2), file: f.name, status: "ERROR", error: String(e)}));
     }
-    hecho += l.length; progreso(hecho, docs.length, `Procesando ${hecho} de ${docs.length}…`); pintarLista();
+    hecho += l.length; progreso(hecho, docs.length, `Procesando ${hecho} de ${docs.length}…${aviso}`); pintarLista();
   }
   // revisiones entre documentos (duplicados) y cruce con los audios
   const infoAudios = [];

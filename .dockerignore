@@ -1,0 +1,8 @@
+.git
+.vercel
+tests
+salida
+cola_aprendizaje
+_scripts
+**/__pycache__
+*.docx

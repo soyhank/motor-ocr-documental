@@ -4,6 +4,8 @@ Por cada PDF se crean tres variantes en tests/escaneos/:
   *_limpio.png   300 DPI, sin distorsión (escáner de oficina bien calibrado)
   *_normal.png   200 DPI, 1° de inclinación, sombra lateral y algo de ruido
   *_malo.png     150 DPI, 2.5° de inclinación, sombra fuerte, ruido y desenfoque
+  *_celular.jpg  foto de celular: perspectiva, luz desigual, tono amarillento, JPEG calidad 70
+  *_oficina.jpg  escáner de oficina a 200 DPI guardado en JPEG calidad 55, 0.6° y algo de desenfoque
 
 Uso: python _scripts/generar_escaneos.py [nombre_parcial ...]
 """
@@ -23,7 +25,26 @@ VARIANTES = {
     "limpio": dict(dpi=300, angulo=0.0, sombra=0, ruido=0, blur=0),
     "normal": dict(dpi=200, angulo=1.0, sombra=35, ruido=10, blur=0),
     "malo": dict(dpi=150, angulo=2.5, sombra=60, ruido=18, blur=1),
+    "celular": dict(dpi=220, angulo=0.0, sombra=0, ruido=6, blur=0.7, perspectiva=0.035, luz=70, jpeg=70),
+    "oficina": dict(dpi=200, angulo=0.6, sombra=15, ruido=5, blur=0.5, jpeg=55),
 }
+
+
+def foto(img: np.ndarray, perspectiva: float, luz: int, semilla: int) -> np.ndarray:
+    """Foto de celular: la hoja vista algo en trapecio, foco de luz y tono amarillento."""
+    rng = np.random.default_rng(semilla)
+    h, w = img.shape[:2]
+    d = perspectiva * min(h, w)
+    src = np.float32([[0, 0], [w, 0], [w, h], [0, h]])
+    dst = np.float32([[d * rng.uniform(0.5, 1.5), d * rng.uniform(0.2, 1)], [w - d * rng.uniform(0, 0.6), d * rng.uniform(0, 0.5)],
+                      [w - d * rng.uniform(0.3, 1.2), h - d * rng.uniform(0, 0.4)], [d * rng.uniform(0, 0.5), h - d * rng.uniform(0.5, 1.2)]])
+    out = cv2.warpPerspective(img, cv2.getPerspectiveTransform(src, dst), (w, h), borderValue=(150, 150, 150)).astype(np.float32)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    cx, cy = w * rng.uniform(0.3, 0.7), h * rng.uniform(0.2, 0.5)
+    r = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2) / np.hypot(w, h)
+    out -= (luz * r * 1.6)[..., None]
+    out *= np.float32([0.86, 0.95, 1.0])  # BGR: tono cálido
+    return np.clip(out, 0, 255).astype(np.uint8)
 
 
 def render(pdf: Path, dpi: int) -> np.ndarray:
@@ -57,8 +78,18 @@ def main(filtros: list[str]):
     for i, pdf in enumerate(pdfs):
         base = pdf.stem[:40].replace(" ", "_")
         for nombre, v in VARIANTES.items():
-            img = distorsionar(render(pdf, v["dpi"]), v["angulo"], v["sombra"], v["ruido"], v["blur"], semilla=i)
-            (DESTINO / f"{base}__{nombre}.png").write_bytes(cv2.imencode(".png", img)[1].tobytes())
+            ext = ".jpg" if v.get("jpeg") else ".png"
+            if (DESTINO / f"{base}__{nombre}{ext}").exists():
+                continue  # no se rehace: el banco tiene que ser estable entre mediciones
+            img = render(pdf, v["dpi"])
+            if v.get("perspectiva"):
+                img = foto(img, v["perspectiva"], v.get("luz", 0), semilla=i)
+            img = distorsionar(img, v["angulo"], v["sombra"], v["ruido"], v["blur"], semilla=i)
+            if v.get("jpeg"):
+                datos = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, v["jpeg"]])[1].tobytes()
+                (DESTINO / f"{base}__{nombre}.jpg").write_bytes(datos)
+            else:
+                (DESTINO / f"{base}__{nombre}.png").write_bytes(cv2.imencode(".png", img)[1].tobytes())
         print("ok", pdf.name)
 
 

@@ -10,22 +10,32 @@
       {
         "type": "exact_text",
         "value": "PROVEEDOR REAL:",
-        "weight": 30
+        "weight": 25
       },
       {
         "type": "fuzzy_text",
         "value": "CONDICION PAGO PROVEEDOR",
-        "weight": 25
+        "weight": 20
       },
       {
         "type": "regex",
         "value": "ORDEN N.?\\s*\\d+\\s+Rv\\.",
-        "weight": 25
+        "weight": 20
       },
       {
         "type": "exact_text",
         "value": "FACTURA PROVEEDOR",
-        "weight": 20
+        "weight": 15
+      },
+      {
+        "type": "regex",
+        "value": "Divisi[oó]n\\s*:",
+        "weight": 10
+      },
+      {
+        "type": "regex",
+        "value": "PAUTA N.?\\s*:?\\s*\\d+/\\d{4}",
+        "weight": 10
       }
     ]
   },
