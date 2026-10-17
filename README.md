@@ -80,6 +80,16 @@ Lo que trae la interfaz (diseño de vidrio, modo claro y oscuro):
 
 Cada orden trae `documento.certeza` (`motor/certeza.py`): un puntaje de 0 a 100 que combina la **validación** (50 %: si cuadran las reglas), la **lectura** (30 %: confianza del OCR en cada dato; en PDF digital es 1) y el **formato** (20 %: puntaje de la plantilla). Si falla una regla de error, el puntaje queda en 70 como máximo. Niveles: ALTA ≥ 90 (lista para aprobar), MEDIA 75–89 (revisión rápida), BAJA < 75 (revisión completa). También trae `dudosos`: los datos leídos con confianza menor a 0,85. `_scripts/calibrar_certeza.py` compara el puntaje con la exactitud real en el banco de escaneos.
 
+Calibración en el banco de 70 escaneos simulados (14 órdenes × 5 condiciones):
+
+| Nivel | Órdenes | Perfectas | Exactitud por dato |
+|---|---|---|---|
+| ALTA (94 a 100) | 68 | 68 | 100 % |
+| MEDIA | 0 | – | – |
+| BAJA (29 y 42) | 2 | 0 | 53,2 % |
+
+Los 95 datos mal leídos quedaron todos en las 2 órdenes de certeza BAJA (escaneos de 150 ppp, estado «No cuadra»): ninguna orden con certeza ALTA traía un error.
+
 ## Revisión y corrección en pantalla
 
 En la ficha de cada orden, «Qué revisar» lista los errores con su fila. «Corregir datos» vuelve editables la cabecera, los totales, las filas y cada día de la pauta; «Validar de nuevo» recalcula todas las reglas (`POST /api/revalidar`). Cada corrección queda en `correcciones` con el valor leído y el final, y la lista muestra la orden como «corregida».
