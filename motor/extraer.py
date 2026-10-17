@@ -384,6 +384,8 @@ def _fuente(toks: list[Token], crudo: str) -> dict:
             "x0": round(min(t.x0 for t in toks), 1), "y0": round(min(t.y0 for t in toks), 1),
             "x1": round(max(t.x1 for t in toks), 1), "y1": round(max(t.y1 for t in toks), 1),
         },
+        # confianza del reconocedor: la del token más dudoso (1.0 en PDF digital)
+        "confidence": round(min(t.conf for t in toks), 3),
     }
 
 

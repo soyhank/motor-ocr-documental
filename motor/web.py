@@ -6,15 +6,19 @@ Vercel). El navegador guarda los resultados y las imágenes de cada página.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import io
 import json
-import tempfile
-from pathlib import Path
-
 import os
+import secrets
+import tempfile
+import time
+from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import notificar
@@ -38,28 +42,130 @@ Si la variable de entorno `MOTOR_API_KEY` (o `config.json -> api.claves`) está 
 llamada a `/api/v1` debe llevar la cabecera `X-API-Key`.
 """
 
-app = FastAPI(title="Motor OCR Documental", version="2.0", description=DESCRIPCION_API)
+app = FastAPI(title="Nítida · Motor OCR Documental", version="3.0", description=DESCRIPCION_API)
+
+
+# ------------------------------------------------------------------ inicio de sesión
+# Usuario y contraseña por defecto: admin / 123456789. Se cambian con MOTOR_USUARIO y
+# MOTOR_CONTRASENA; MOTOR_LOGIN=0 lo desactiva (por ejemplo detrás de otro control de acceso).
+# La sesión es una cookie firmada (HMAC-SHA256) que dura 12 horas. /api/v1 usa X-API-Key.
+COOKIE = "nitida_sesion"
+DURACION_SESION = 12 * 3600
+LIBRES = ("/login", "/api/login", "/api/salud", "/api/v1", "/favicon.svg", "/icono.svg")
+_intentos: dict[str, list[float]] = {}
+
+
+def _credenciales() -> tuple[str, str]:
+    return os.environ.get("MOTOR_USUARIO", "admin"), os.environ.get("MOTOR_CONTRASENA", "123456789")
+
+
+def _login_activo() -> bool:
+    return os.environ.get("MOTOR_LOGIN", "1") != "0"
+
+
+def _secreto() -> bytes:
+    """Clave para firmar la sesión: MOTOR_SECRETO o una aleatoria guardada en salida/ (así un
+    reinicio del servidor no cierra las sesiones abiertas)."""
+    if os.environ.get("MOTOR_SECRETO"):
+        return os.environ["MOTOR_SECRETO"].encode()
+    if not hasattr(_secreto, "valor"):
+        ruta = RAIZ / "salida" / ".secreto_sesion"
+        try:
+            _secreto.valor = ruta.read_bytes()
+        except OSError:
+            _secreto.valor = secrets.token_bytes(32)
+            try:
+                ruta.parent.mkdir(exist_ok=True)
+                ruta.write_bytes(_secreto.valor)
+            except OSError:
+                pass  # disco de solo lectura (Vercel): la clave vive mientras viva el proceso
+    return _secreto.valor
+
+
+def _firmar(usuario: str, vence: int) -> str:
+    cuerpo = f"{usuario}|{vence}"
+    firma = hmac.new(_secreto(), cuerpo.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{cuerpo}|{firma}".encode()).decode()
+
+
+def _usuario_de(cookie: str | None) -> str | None:
+    if not cookie:
+        return None
+    try:
+        usuario, vence, firma = base64.urlsafe_b64decode(cookie.encode()).decode().rsplit("|", 2)
+    except Exception:  # noqa: BLE001
+        return None
+    esperada = hmac.new(_secreto(), f"{usuario}|{vence}".encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(firma, esperada) or int(vence) < time.time():
+        return None
+    return usuario
 
 
 @app.middleware("http")
-async def _clave_web(request, call_next):
-    """Si MOTOR_CLAVE_WEB está definida (por ejemplo al abrirlo a internet con un túnel), la
-    página y su API piden esa contraseña (usuario: cualquiera). /api/v1 usa X-API-Key."""
-    clave = os.environ.get("MOTOR_CLAVE_WEB")
-    if clave and not request.url.path.startswith("/api/v1"):
-        import secrets
-        auth = request.headers.get("authorization", "")
-        ok = False
-        if auth.lower().startswith("basic "):
-            try:
-                _, _, pw = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
-                ok = secrets.compare_digest(pw, clave)
-            except Exception:  # noqa: BLE001
-                ok = False
-        if not ok:
-            return Response("Se necesita la contraseña de acceso", status_code=401,
-                            headers={"WWW-Authenticate": 'Basic realm="Motor OCR", charset="UTF-8"'})
-    return await call_next(request)
+async def _sesion(request, call_next):
+    ruta = request.url.path
+    if not _login_activo() or ruta.startswith(LIBRES):
+        return await call_next(request)
+    usuario = _usuario_de(request.cookies.get(COOKIE))
+    if usuario:
+        request.state.usuario = usuario
+        return await call_next(request)
+    if ruta.startswith("/api") or ruta in ("/docs", "/openapi.json", "/redoc"):
+        return JSONResponse({"detail": "Inicia sesión para continuar"}, status_code=401)
+    return RedirectResponse("/login" + (f"?next={quote(ruta)}" if ruta != "/" else ""), status_code=303)
+
+
+class Ingreso(BaseModel):
+    usuario: str
+    contrasena: str
+    recordar: bool = True
+
+
+@app.get("/login")
+def pagina_login():
+    return FileResponse(RAIZ / "web" / "login.html")
+
+
+@app.post("/api/login")
+def api_login(body: Ingreso, request: Request):
+    ip = request.client.host if request.client else "?"
+    ahora = time.time()
+    fallos = [t for t in _intentos.get(ip, []) if ahora - t < 300]
+    if len(fallos) >= 8:
+        espera = int(300 - (ahora - fallos[0])) + 1
+        return JSONResponse({"detail": f"Demasiados intentos. Prueba de nuevo en {espera} s."}, status_code=429)
+    usuario, clave = _credenciales()
+    ok = hmac.compare_digest(body.usuario.strip().lower(), usuario.lower()) & hmac.compare_digest(body.contrasena, clave)
+    if not ok:
+        _intentos[ip] = [*fallos, ahora]
+        return JSONResponse({"detail": "Usuario o contraseña incorrectos", "restantes": 8 - len(fallos) - 1},
+                            status_code=401)
+    _intentos.pop(ip, None)
+    r = JSONResponse({"ok": True, "usuario": usuario})
+    segura = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    r.set_cookie(COOKIE, _firmar(usuario, int(ahora) + DURACION_SESION), httponly=True, samesite="lax",
+                 secure=segura, max_age=DURACION_SESION if body.recordar else None)
+    return r
+
+
+@app.post("/api/logout")
+def api_logout():
+    r = JSONResponse({"ok": True})
+    r.delete_cookie(COOKIE)
+    return r
+
+
+@app.get("/api/sesion")
+def api_sesion(request: Request):
+    return {"usuario": getattr(request.state, "usuario", None), "login": _login_activo()}
+
+
+@app.get("/icono.svg")
+@app.get("/favicon.svg")
+def icono():
+    return FileResponse(RAIZ / "web" / "icono.svg", media_type="image/svg+xml")
+
+
 DIR_MUESTRAS = RAIZ / "muestras"
 ANCHO_VISTA = 1400  # px de ancho de la imagen que se manda al navegador
 

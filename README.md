@@ -1,6 +1,6 @@
-# Motor OCR Documental Flexible
+# Nítida · Motor OCR Documental Flexible
 
-Implementación de `Motor_OCR_Documental_Flexible_Especificacion.docx` para **órdenes de publicidad de agencias** dirigidas a Grupo RPP.
+**Nítida** es el nombre de la aplicación. Implementación de `Motor_OCR_Documental_Flexible_Especificacion.docx` para **órdenes de publicidad de agencias** dirigidas a Grupo RPP.
 
 Sin LLM en producción: el pipeline es determinista (ingesta → preproceso → OCR posicional → normalización → identificación por puntaje → extracción por anclas y tablas → validación) y cada formato de agencia es una plantilla JSON.
 
@@ -13,10 +13,10 @@ pip install -r requirements.txt
 python -m motor procesar muestras/ --salida salida
 
 # interfaz web local: subir órdenes, ver cada dato resaltado sobre el documento, descargar Excel
-python -m motor web          # http://127.0.0.1:8765
+python -m motor web          # http://127.0.0.1:8765  (usuario admin, contraseña 123456789)
 
 # pruebas de regresión con los 14 PDF de muestra (valores verificados a mano)
-python -m pytest tests -q          # 27 pruebas
+python -m pytest tests -q          # 30 pruebas
 ```
 
 La salida trae un JSON por documento (formato de la sección 7 de la especificación: valor, tag, página, texto crudo y bbox de cada campo) y un Excel con las hojas Órdenes, Detalle, Programación (un renglón por día) y Validaciones.
@@ -64,6 +64,21 @@ Las plantillas genéricas se armaron conociendo los 5 formatos reales, así que 
 python -m motor calibrar nueva_orden.pdf --id ORDEN_AGENCIA_X
 python -m motor probar cola_aprendizaje/nueva_orden.borrador.json nueva_orden.pdf --promover
 ```
+
+## Interfaz web e inicio de sesión
+
+La web pide usuario y contraseña (por defecto `admin` / `123456789`). Se cambian con las variables `MOTOR_USUARIO` y `MOTOR_CONTRASENA`; `MOTOR_LOGIN=0` lo desactiva. La sesión es una cookie firmada (HMAC-SHA256) que dura 12 horas; tras 8 intentos fallidos en 5 minutos el ingreso se bloquea un rato. La clave de firma sale de `MOTOR_SECRETO` o se genera una vez en `salida/.secreto_sesion`. `/api/v1` no usa la sesión: usa `X-API-Key`. **Cambia la contraseña por defecto antes de abrir el servicio a internet: el repositorio es público.**
+
+Lo que trae la interfaz (diseño de vidrio, modo claro y oscuro):
+
+* **Panel**: órdenes leídas, certeza promedio, órdenes listas para aprobar, monto total y avisos, gráfico de estados, monto por agencia y la lista de órdenes que requieren atención. La actividad muestra cada archivo mientras se lee.
+* **Órdenes**: filtros (todas, listas para aprobar, por revisar, con error) y búsqueda.
+* **Ficha de la orden** en una hoja deslizable: el documento con el **mapa de certeza** (cada dato pintado en verde, ámbar o rojo según la confianza del OCR), acercar y alejar, puntaje con su desglose, «Datos a confirmar» que señalan el dato sobre el documento, y ← → para pasar a la siguiente orden.
+* **Paleta de comandos** con `Ctrl K` (buscar órdenes o ejecutar acciones) y atajos: `U` subir, `1 2 3` vistas, `E` corregir, `M` mapa, `Esc` cerrar.
+
+## Puntaje de certeza
+
+Cada orden trae `documento.certeza` (`motor/certeza.py`): un puntaje de 0 a 100 que combina la **validación** (50 %: si cuadran las reglas), la **lectura** (30 %: confianza del OCR en cada dato; en PDF digital es 1) y el **formato** (20 %: puntaje de la plantilla). Si falla una regla de error, el puntaje queda en 70 como máximo. Niveles: ALTA ≥ 90 (lista para aprobar), MEDIA 75–89 (revisión rápida), BAJA < 75 (revisión completa). También trae `dudosos`: los datos leídos con confianza menor a 0,85. `_scripts/calibrar_certeza.py` compara el puntaje con la exactitud real en el banco de escaneos.
 
 ## Revisión y corrección en pantalla
 
@@ -150,7 +165,7 @@ El motor rinde mejor en un equipo propio: el reconocedor grande tarda unos 45 s 
 
 **En esta PC (Windows)**: doble clic en `INICIAR.bat` (la primera vez instala las dependencias) y se abre http://127.0.0.1:8765. Con `INICIAR.bat red` también lo pueden usar otros equipos de la misma red entrando a `http://IP-de-esta-PC:8765`.
 
-**Para que alguien lo pruebe desde afuera, con esta PC como servidor**: doble clic en `PUBLICAR.bat`. Arranca el motor y abre un túnel temporal de Cloudflare (gratis, sin cuenta; descarga una sola vez el `cloudflared.exe` oficial en `herramientas/`). En la ventana aparece una dirección `https://…trycloudflare.com` que se puede mandar a cualquiera; por defecto el acceso es libre. `PUBLICAR.bat MiClave` pide esa contraseña (usuario cualquiera) y la API la usa como `X-API-Key`. La dirección cambia cada vez que se abre y deja de funcionar al cerrar la ventana o apagar la PC. Cloudflare corta las respuestas que tardan más de 100 s: un escaneo de una página tarda unos 45 s, así que conviene subir los escaneos de a uno.
+**Para que alguien lo pruebe desde afuera, con esta PC como servidor**: doble clic en `PUBLICAR.bat`. Arranca el motor y abre un túnel temporal de Cloudflare (gratis, sin cuenta; descarga una sola vez el `cloudflared.exe` oficial en `herramientas/`). En la ventana aparece una dirección `https://…trycloudflare.com` que se puede mandar a cualquiera; se entra con `admin` / `123456789`. `PUBLICAR.bat MiClave` usa esa contraseña (usuario `admin`) y la API la usa como `X-API-Key`. La dirección cambia cada vez que se abre y deja de funcionar al cerrar la ventana o apagar la PC. Cloudflare corta las respuestas que tardan más de 100 s: un escaneo de una página tarda unos 45 s, así que conviene subir los escaneos de a uno.
 
 **En un servidor propio** (VPS, Render, Railway, Fly.io, Cloud Run…) con Docker:
 

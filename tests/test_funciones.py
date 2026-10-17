@@ -89,3 +89,53 @@ def test_api_v1(monkeypatch):
     assert r.status_code == 200 and r.json()["cabecera"]["numero_orden"] == "461770"
     v = c.post("/api/v1/ordenes/validar", json=r.json(), headers={"X-API-Key": "k"})
     assert v.json()["validacion"]["ok"]
+
+
+def test_login(monkeypatch):
+    from fastapi.testclient import TestClient
+    from motor import web
+
+    monkeypatch.delenv("MOTOR_LOGIN", raising=False)
+    web._intentos.clear()
+    c = TestClient(web.app)
+    assert c.get("/", follow_redirects=False).status_code == 303
+    assert c.get("/api/plantillas").status_code == 401
+    assert c.get("/login").status_code == 200 and c.get("/api/salud").status_code == 200
+    assert c.post("/api/login", json={"usuario": "admin", "contrasena": "mal"}).status_code == 401
+    r = c.post("/api/login", json={"usuario": "admin", "contrasena": "123456789"})
+    assert r.status_code == 200 and web.COOKIE in r.cookies
+    assert c.get("/api/plantillas").status_code == 200
+    assert c.get("/api/sesion").json()["usuario"] == "admin"
+    c.post("/api/logout")
+    c.cookies.clear()
+    assert c.get("/api/plantillas").status_code == 401
+    # una cookie alterada no sirve
+    c.cookies.set(web.COOKIE, web._firmar("admin", 9999999999)[:-4] + "AAAA")
+    assert c.get("/api/plantillas").status_code == 401
+
+
+def test_login_bloquea_tras_intentos(monkeypatch):
+    from fastapi.testclient import TestClient
+    from motor import web
+
+    web._intentos.clear()
+    c = TestClient(web.app)
+    for _ in range(8):
+        c.post("/api/login", json={"usuario": "admin", "contrasena": "x"})
+    assert c.post("/api/login", json={"usuario": "admin", "contrasena": "123456789"}).status_code == 429
+    web._intentos.clear()
+
+
+def test_certeza():
+    from motor.certeza import certeza
+
+    r = procesar(RAIZ / "muestras" / "461770_OXIGENO-NN.pdf")
+    r.pop("_doc", None)
+    c = certeza(r)
+    assert c["puntaje"] >= 95 and c["nivel"] == "ALTA" and not c["dudosos"]
+    assert salida_simple(r)["documento"]["certeza"]["puntaje"] == c["puntaje"]
+    # si no cuadra, nunca queda en ALTA
+    malo = json.loads(json.dumps(salida_simple(r)))
+    malo["totales"]["total"] = 1.0
+    assert revalidar_simple(malo)["documento"]["certeza"]["puntaje"] <= 70
+    assert certeza({"status": "ERROR"})["puntaje"] == 0

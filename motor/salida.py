@@ -32,6 +32,9 @@ _DETALLE = ("descripcion", "programa", "motivo", "seccion", "tema", "tipo_aviso"
 _TOTALES_EN_CABECERA = ("moneda",)
 
 
+from .certeza import certeza  # noqa: E402
+
+
 def _v(campo):
     return campo.get("value") if isinstance(campo, dict) else campo
 
@@ -67,6 +70,7 @@ def salida_simple(res: dict) -> dict:
         "paginas": len(res.get("pages") or []),
         "sha256": res.get("sha256"),
         "procesadoEn": datetime.now().isoformat(timespec="seconds"),
+        "certeza": certeza(res),
     }
     if error:
         doc["error"] = error if isinstance(error, dict) else {"code": "LECTURA", "message": str(error)}
@@ -153,8 +157,9 @@ def revalidar_simple(simple: dict) -> dict:
     rep, datos = revalidar_datos(datos, (simple.get("documento") or {}).get("plantilla"))
     res = {"documentId": (simple.get("documento") or {}).get("id"), "file": (simple.get("documento") or {}).get("archivo"),
            "status": _estado(rep), "template": {"templateId": (simple.get("documento") or {}).get("plantilla")},
-           "extractedData": datos, "validationReport": rep, "corrections": simple.get("correcciones")}
+           "extractedData": datos, "validationReport": rep, "corrections": simple.get("correcciones"),
+           "_lecturaPrevia": ((simple.get("documento") or {}).get("certeza") or {}).get("lectura", 100.0)}
     out = salida_simple(res)
-    out["documento"] = {**(simple.get("documento") or {}), "estado": res["status"],
+    out["documento"] = {**(simple.get("documento") or {}), "estado": res["status"], "certeza": out["documento"]["certeza"],
                         "estadoTexto": ESTADOS.get(res["status"]), "revalidadoEn": datetime.now().isoformat(timespec="seconds")}
     return out

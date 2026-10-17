@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1022">
+<title>Nítida · Iniciar sesión</title>
+<link rel="icon" href="/icono.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0d1330; --muted:rgba(13,19,48,.62); --glass:rgba(255,255,255,.42); --glass-2:rgba(255,255,255,.62);
+  --edge:rgba(255,255,255,.75); --shadow:0 30px 80px -20px rgba(25,35,90,.45);
+  --accent:#5b6cff; --accent-2:#8a5cff; --bad:#ff4d6d; --bg:#dfe6ff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--ink:#f3f5ff; --muted:rgba(235,240,255,.66); --glass:rgba(22,28,58,.38); --glass-2:rgba(40,48,92,.55);
+    --edge:rgba(255,255,255,.22); --shadow:0 30px 90px -20px rgba(0,0,0,.7); --bg:#070b1d}
+}
+:root[data-theme="dark"]{--ink:#f3f5ff; --muted:rgba(235,240,255,.66); --glass:rgba(22,28,58,.38); --glass-2:rgba(40,48,92,.55);
+  --edge:rgba(255,255,255,.22); --shadow:0 30px 90px -20px rgba(0,0,0,.7); --bg:#070b1d}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Inter,-apple-system,"SF Pro Text",system-ui,sans-serif;
+  overflow:hidden;-webkit-font-smoothing:antialiased}
+/* fondo: malla de color que se mueve muy despacio */
+.mesh{position:fixed;inset:-20%;z-index:0;filter:blur(70px) saturate(140%);opacity:.95}
+.mesh i{position:absolute;border-radius:50%;mix-blend-mode:normal;animation:flota 22s ease-in-out infinite alternate}
+.mesh i:nth-child(1){width:55vmax;height:55vmax;left:-5%;top:-10%;background:#6a7bff}
+.mesh i:nth-child(2){width:45vmax;height:45vmax;right:-8%;top:5%;background:#b05cff;animation-duration:26s;animation-delay:-6s}
+.mesh i:nth-child(3){width:50vmax;height:50vmax;left:20%;bottom:-25%;background:#22c3ee;animation-duration:30s;animation-delay:-12s}
+.mesh i:nth-child(4){width:30vmax;height:30vmax;right:15%;bottom:0;background:#ff7ab6;opacity:.7;animation-duration:24s}
+@keyframes flota{0%{transform:translate(0,0) scale(1)}50%{transform:translate(6vmax,-4vmax) scale(1.08)}100%{transform:translate(-5vmax,5vmax) scale(.95)}}
+.grano{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.07;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+main{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;gap:28px}
+/* reloj de pantalla de bloqueo */
+.reloj{text-align:center;color:#fff;text-shadow:0 2px 30px rgba(20,20,70,.25);user-select:none}
+.reloj{color:#1b2350;text-shadow:none}
+.reloj .hora{background:linear-gradient(180deg,#1b2350 20%,rgba(27,35,80,.55))!important;-webkit-background-clip:text!important;background-clip:text!important}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .reloj{color:#fff} :root:not([data-theme="light"]) .reloj .hora{background:linear-gradient(180deg,#fff 30%,rgba(255,255,255,.7))!important;-webkit-background-clip:text!important;background-clip:text!important}}
+:root[data-theme="dark"] .reloj{color:#fff} :root[data-theme="dark"] .reloj .hora{background:linear-gradient(180deg,#fff 30%,rgba(255,255,255,.7))!important;-webkit-background-clip:text!important;background-clip:text!important}
+.reloj .fecha{font-size:19px;font-weight:600;letter-spacing:.01em;opacity:.92}
+.reloj .hora{font-size:clamp(76px,16vw,112px);font-weight:700;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums;
+  background:linear-gradient(180deg,#fff 30%,rgba(255,255,255,.72));-webkit-background-clip:text;background-clip:text;color:transparent}
+/* tarjeta de vidrio líquido */
+.vidrio{position:relative;background:var(--glass);border-radius:34px;box-shadow:var(--shadow),inset 0 1px 0 var(--edge),inset 0 -1px 0 rgba(255,255,255,.12);
+  -webkit-backdrop-filter:blur(34px) saturate(190%);backdrop-filter:blur(34px) saturate(190%)}
+.vidrio::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(140deg,rgba(255,255,255,.9),rgba(255,255,255,.08) 38%,rgba(255,255,255,.04) 62%,rgba(255,255,255,.55));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.vidrio::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(120% 60% at 20% -10%,rgba(255,255,255,.35),transparent 55%)}
+.tarjeta{width:min(400px,100%);padding:34px 30px 26px}
+.marca{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.marca img{width:56px;height:56px;border-radius:15px;box-shadow:0 10px 24px -6px rgba(90,80,255,.6)}
+.marca h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.03em}
+.marca p{margin:2px 0 0;color:var(--muted);font-size:13px}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:0 0 6px 4px;letter-spacing:.02em}
+.campo{position:relative;margin-bottom:14px}
+.campo input{width:100%;font:inherit;font-size:16px;color:var(--ink);padding:14px 46px 14px 44px;border-radius:16px;outline:none;
+  border:1px solid rgba(255,255,255,.55);background:var(--glass-2);box-shadow:inset 0 1px 2px rgba(0,0,0,.06);transition:box-shadow .2s,border-color .2s,background .2s}
+.campo input:focus{border-color:rgba(120,130,255,.9);box-shadow:0 0 0 4px rgba(110,120,255,.22),inset 0 1px 2px rgba(0,0,0,.05)}
+.campo svg.ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;opacity:.55}
+.ojo{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--ink);opacity:.55;padding:8px;border-radius:10px;cursor:pointer}
+.ojo:hover{opacity:.9}
+.fila{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 20px;font-size:13px;color:var(--muted)}
+/* interruptor estilo iOS */
+.sw{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.sw input{display:none}
+.sw span{width:44px;height:26px;border-radius:99px;background:rgba(120,130,160,.35);position:relative;transition:background .25s}
+.sw span::after{content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);transition:transform .25s cubic-bezier(.3,1.4,.5,1)}
+.sw input:checked+span{background:#34c759}
+.sw input:checked+span::after{transform:translateX(18px)}
+.mayus{color:#ff9f0a;font-weight:600;display:none}
+button.entrar{width:100%;font:inherit;font-weight:700;font-size:16px;color:#fff;border:0;border-radius:16px;padding:15px;cursor:pointer;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 14px 30px -10px rgba(100,90,255,.8),inset 0 1px 0 rgba(255,255,255,.45);transition:transform .15s,filter .2s}
+button.entrar:hover{filter:brightness(1.07)} button.entrar:active{transform:scale(.98)}
+button.entrar:disabled{filter:grayscale(.3) brightness(.9);cursor:default}
+button.entrar::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.4) 50%,transparent 70%);transform:translateX(-100%);animation:brillo 3.2s ease-in-out infinite}
+@keyframes brillo{60%,100%{transform:translateX(100%)}}
+.error{min-height:20px;margin:12px 2px 0;color:var(--bad);font-size:13px;font-weight:600;text-align:center}
+.pie{margin-top:18px;text-align:center;font-size:12px;color:var(--muted)}
+.temblor{animation:tiembla .45s}
+@keyframes tiembla{20%{transform:translateX(-10px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(4px)}}
+.ok{animation:sale .55s cubic-bezier(.6,0,.4,1) forwards}
+@keyframes sale{to{transform:scale(.92) translateY(-12px);opacity:0;filter:blur(8px)}}
+.giro{display:inline-block;width:16px;height:16px;border:2px solid #fff;border-right-color:transparent;border-radius:50%;animation:g .7s linear infinite;vertical-align:-3px}
+@keyframes g{to{transform:rotate(360deg)}}
+.entra{animation:entra .8s cubic-bezier(.2,.9,.3,1.2) both}
+.entra.d2{animation-delay:.08s}
+@keyframes entra{from{opacity:0;transform:translateY(24px) scale(.97);filter:blur(6px)}}
+@media (max-height:640px){.reloj{display:none}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="mesh" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="grano" aria-hidden="true"></div>
+<main>
+  <div class="reloj entra" aria-hidden="true"><div class="fecha" id="fecha"></div><div class="hora" id="hora">00:00</div></div>
+  <form class="vidrio tarjeta entra d2" id="form" autocomplete="on">
+    <div class="marca">
+      <img src="/icono.svg" alt="">
+      <div><h1>Nítida</h1><p>Lectura inteligente de órdenes de publicidad</p></div>
+    </div>
+    <label for="usuario">Usuario</label>
+    <div class="campo">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+      <input id="usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+    </div>
+    <label for="clave">Contraseña</label>
+    <div class="campo">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <input id="clave" name="password" type="password" autocomplete="current-password" required>
+      <button type="button" class="ojo" id="ojo" aria-label="Mostrar contraseña">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+    <div class="fila">
+      <label class="sw" style="margin:0;font-weight:500"><input type="checkbox" id="recordar" checked><span></span>Mantener sesión</label>
+      <span class="mayus" id="mayus">Bloq Mayús activado</span>
+    </div>
+    <button class="entrar" id="entrar" type="submit">Iniciar sesión</button>
+    <div class="error" id="error" role="alert"></div>
+    <div class="pie">Acceso restringido · la sesión dura 12 horas</div>
+  </form>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+function reloj(){
+  const d = new Date();
+  $("#hora").textContent = d.toLocaleTimeString("es-PE", {hour:"2-digit", minute:"2-digit", hour12:false});
+  const f = d.toLocaleDateString("es-PE", {weekday:"long", day:"numeric", month:"long"});
+  $("#fecha").textContent = f.charAt(0).toUpperCase() + f.slice(1);
+}
+reloj(); setInterval(reloj, 1000);
+$("#ojo").onclick = () => { const c = $("#clave"); c.type = c.type === "password" ? "text" : "password"; c.focus(); };
+["keydown","keyup"].forEach(ev => document.addEventListener(ev, e => {
+  if (e.getModifierState) $("#mayus").style.display = e.getModifierState("CapsLock") ? "inline" : "none"; }));
+$("#form").onsubmit = async e => {
+  e.preventDefault();
+  const b = $("#entrar"), f = $("#form"); b.disabled = true; b.innerHTML = '<span class="giro"></span>'; $("#error").textContent = "";
+  try {
+    const r = await fetch("/api/login", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({usuario: $("#usuario").value, contrasena: $("#clave").value, recordar: $("#recordar").checked})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || "No se pudo iniciar sesión");
+    f.classList.add("ok");
+    const sig = new URLSearchParams(location.search).get("next");
+    setTimeout(() => location.replace(sig && sig.startsWith("/") && !sig.startsWith("//") ? sig : "/"), 450);
+  } catch (err) {
+    $("#error").textContent = err.message; f.classList.remove("temblor"); void f.offsetWidth; f.classList.add("temblor");
+    if (navigator.vibrate) navigator.vibrate(60);
+    $("#clave").select(); b.disabled = false; b.textContent = "Iniciar sesión";
+  }
+};
+try { const t = localStorage.getItem("nitida_tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</body>
+</html>

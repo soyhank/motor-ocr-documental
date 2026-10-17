@@ -241,7 +241,8 @@ def _elegir_totales(lineas: list[Linea], filas: list[dict], limite: tuple | None
         if k in etiquetas:
             tok = etiquetas[k][0]
             src = {"page": tok.page, "rawText": str(v), "bbox": {"x0": round(tok.x0, 1), "y0": round(tok.y0, 1),
-                                                                    "x1": round(tok.x1, 1), "y1": round(tok.y1, 1)}}
+                                                                    "x1": round(tok.x1, 1), "y1": round(tok.y1, 1)},
+                   "confidence": round(tok.conf, 3)}
         out[k] = {"value": v, "tag": f"TOT_{k.upper()}", "source": src, "_ancla": etiquetas.get(k, (None, None))[1]}
     return out
 
@@ -428,7 +429,8 @@ def _parece_etiqueta(v) -> bool:
 
 def _src(t: Token) -> dict:
     return {"page": t.page, "rawText": t.text,
-            "bbox": {"x0": round(t.x0, 1), "y0": round(t.y0, 1), "x1": round(t.x1, 1), "y1": round(t.y1, 1)}}
+            "bbox": {"x0": round(t.x0, 1), "y0": round(t.y0, 1), "x1": round(t.x1, 1), "y1": round(t.y1, 1)},
+            "confidence": round(t.conf, 3)}
 
 
 # ------------------------------------------------------------------ lectura completa
